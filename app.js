@@ -297,7 +297,7 @@ function topBlockHtml(mainIdx, compIdx, colName, topN, opts) {
     }
   }
 
-  if (opts.expandCol && opts.blockId) BLOCK_DATA[opts.blockId] = { colName, idxArr: opts.expandIdx || mainIdx };
+  if (opts.expandCol && opts.blockId) BLOCK_DATA[opts.blockId] = { colName, idxArr: opts.expandIdx || mainIdx, expandCol: opts.expandCol };
 
   return `<div class="toplist">` + mainTop.map(o => {
     const dyn = dynamics(o.count, compCounts.get(o.key) || 0);
@@ -316,31 +316,94 @@ function topBlockHtml(mainIdx, compIdx, colName, topN, opts) {
 }
 
 /* Click-to-expand: a requester row shows the breakdown of subtopics (or other column) it complained about */
-function attachExpandHandler(containerId) {
-  const container = document.getElementById(containerId);
-  container.addEventListener('click', (e) => {
-    const row = e.target.closest('.toprow.expandable');
-    if (!row || !container.contains(row)) return;
-    const next = row.nextElementSibling;
-    if (next && next.classList.contains('expand-panel')) { next.remove(); row.classList.remove('open'); return; }
-    container.querySelectorAll('.expand-panel').forEach(p => p.remove());
-    container.querySelectorAll('.toprow.expandable.open').forEach(r => r.classList.remove('open'));
-    const blockId = row.dataset.block;
-    const key = Number(row.dataset.key);
-    const info = BLOCK_DATA[blockId];
-    if (!info) return;
-    const col = DATA.cols[info.colName];
-    const subIdx = info.idxArr.filter(i => col[i] === key);
-    const breakdown = countBy(subIdx, 'podtema').slice(0, 8);
-    const maxC = breakdown.length ? breakdown[0].count : 1;
-    const panelHtml = `<div class="expand-panel">` + breakdown.map(b => `
+const EXPAND_STATE = {}; // "blockId::key" -> { breakdown: [...], shown: n }
+const EXPAND_PAGE_SIZE = 10;
+
+function renderExpandPanelHtml(breakdown, shown) {
+  const slice = breakdown.slice(0, shown);
+  const maxC = breakdown.length ? breakdown[0].count : 1;
+  const rowsHtml = slice.map(b => `
       <div class="exp-row">
         <span class="exp-name" title="${escapeHtml(b.label)}">${escapeHtml(b.label)}</span>
         <span class="exp-bar"><i style="width:${Math.round(b.count / maxC * 100)}%"></i></span>
         <span class="exp-cnt">${b.count}</span>
-      </div>`).join('') + `</div>`;
-    row.classList.add('open');
-    row.insertAdjacentHTML('afterend', panelHtml);
+      </div>`).join('');
+  const hasMore = shown < breakdown.length;
+  const controls = `<div class="exp-controls">
+      ${hasMore ? `<button type="button" class="exp-btn exp-more">Показать ещё ${Math.min(EXPAND_PAGE_SIZE, breakdown.length - shown)}</button>` : ''}
+      <button type="button" class="exp-btn exp-less">Скрыть ${Math.min(EXPAND_PAGE_SIZE, shown)}</button>
+    </div>`;
+  return `<div class="expand-panel">${rowsHtml}${controls}</div>`;
+}
+
+function closeExpandRow(row, stateKey) {
+  const next = row.nextElementSibling;
+  if (next && next.classList.contains('expand-panel')) next.remove();
+  row.classList.remove('open');
+  delete EXPAND_STATE[stateKey];
+}
+
+function openExpandRow(row) {
+  const blockId = row.dataset.block;
+  const key = Number(row.dataset.key);
+  const stateKey = blockId + '::' + key;
+  const info = BLOCK_DATA[blockId];
+  if (!info) return;
+  const col = DATA.cols[info.colName];
+  const subIdx = info.idxArr.filter(i => col[i] === key);
+  const breakdown = countBy(subIdx, info.expandCol);
+  EXPAND_STATE[stateKey] = { breakdown, shown: Math.min(EXPAND_PAGE_SIZE, breakdown.length) };
+  row.classList.add('open');
+  row.insertAdjacentHTML('afterend', renderExpandPanelHtml(breakdown, EXPAND_STATE[stateKey].shown));
+}
+
+function refreshExpandRow(row, stateKey) {
+  const st = EXPAND_STATE[stateKey];
+  const next = row.nextElementSibling;
+  if (next && next.classList.contains('expand-panel')) next.remove();
+  row.insertAdjacentHTML('afterend', renderExpandPanelHtml(st.breakdown, st.shown));
+}
+
+function attachExpandHandler(containerId) {
+  const container = document.getElementById(containerId);
+
+  container.addEventListener('click', (e) => {
+    const moreBtn = e.target.closest('.exp-more');
+    const lessBtn = e.target.closest('.exp-less');
+    if (moreBtn || lessBtn) {
+      e.stopPropagation();
+      const panel = e.target.closest('.expand-panel');
+      const row = panel.previousElementSibling;
+      const stateKey = row.dataset.block + '::' + row.dataset.key;
+      const st = EXPAND_STATE[stateKey];
+      if (!st) return;
+      if (moreBtn) {
+        st.shown = Math.min(st.breakdown.length, st.shown + EXPAND_PAGE_SIZE);
+        refreshExpandRow(row, stateKey);
+      } else {
+        st.shown -= EXPAND_PAGE_SIZE;
+        if (st.shown <= 0) closeExpandRow(row, stateKey);
+        else refreshExpandRow(row, stateKey);
+      }
+      return;
+    }
+
+    const row = e.target.closest('.toprow.expandable');
+    if (!row || !container.contains(row)) return;
+    const stateKey = row.dataset.block + '::' + row.dataset.key;
+    if (row.classList.contains('open')) { closeExpandRow(row, stateKey); return; }
+    // one expanded row at a time per block keeps the list readable
+    container.querySelectorAll('.toprow.expandable.open').forEach(r => {
+      closeExpandRow(r, r.dataset.block + '::' + r.dataset.key);
+    });
+    openExpandRow(row);
+  });
+}
+
+function collapseAllExpanded(containerId) {
+  const container = document.getElementById(containerId);
+  container.querySelectorAll('.toprow.expandable.open').forEach(r => {
+    closeExpandRow(r, r.dataset.block + '::' + r.dataset.key);
   });
 }
 
@@ -479,7 +542,7 @@ function renderOverview() {
   document.getElementById('ov-istochnik').innerHTML = topBlockHtml(mainIdx, compIdx, 'istochnik', 8);
   document.getElementById('ov-tip').innerHTML = topBlockHtml(mainIdx, compIdx, 'tip', 8);
 
-  document.getElementById('ov-podtemy').innerHTML = topBlockHtml(mainIdx, compIdx, 'podtema', 10);
+  document.getElementById('ov-podtemy').innerHTML = topBlockHtml(mainIdx, compIdx, 'podtema', 10, { expandCol: 'fact', blockId: 'ov-podtemy' });
   document.getElementById('ov-fakty').innerHTML = topBlockHtml(mainIdx, compIdx, 'fact', 10);
 
   document.getElementById('ov-emails').innerHTML = topBlockHtml(mainIdx, compIdx, 'email', 10, { excludeNull: true, modeCol: 'naspunkt', modeLabel: 'Насел. пункт', expandCol: 'podtema', blockId: 'ov-emails' });
@@ -557,7 +620,7 @@ function renderCuratorTab() {
     const sintLabel = sintKey === -1 ? '—' : DATA.dicts.sint[sintKey];
     note.textContent = `— ${naprLabel} — ${sintLabel} (${drillMain.length})`;
 
-    document.getElementById('c-podtemy').innerHTML = topBlockHtml(drillMain, drillComp, 'podtema', 10);
+    document.getElementById('c-podtemy').innerHTML = topBlockHtml(drillMain, drillComp, 'podtema', 10, { expandCol: 'fact', blockId: 'c-podtemy' });
     document.getElementById('c-fakty').innerHTML = topBlockHtml(drillMain, drillComp, 'fact', 10);
     document.getElementById('c-istochniki').innerHTML = topBlockHtml(drillMain, drillComp, 'istochnik', 10);
     document.getElementById('c-addresa').innerHTML = topBlockHtml(drillAddr, drillAddrComp, 'addr', 10, { modeCol: 'podtema', modeLabel: 'Гл. подтема' });
@@ -642,6 +705,13 @@ function init() {
   buildCuratorPicker();
   attachExpandHandler('ov-emails');
   attachExpandHandler('c-emails');
+  attachExpandHandler('ov-podtemy');
+  attachExpandHandler('c-podtemy');
+
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('.collapse-all-btn');
+    if (btn) collapseAllExpanded(btn.dataset.collapse);
+  });
 
   document.getElementById('btnApply').addEventListener('click', applyAll);
   document.getElementById('btnReset').addEventListener('click', resetFilters);
