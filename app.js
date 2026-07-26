@@ -81,6 +81,25 @@ function countBy(idxArr, colName, opts) {
   arr.sort((a, b) => b.count - a.count);
   return arr;
 }
+/* Counts by the combination of two columns together, e.g. Направление + Синт.группа —
+   only combinations that actually occur in the data show up (no empty cross-product). */
+function countByPair(idxArr, colA, colB) {
+  const ca = DATA.cols[colA], cb = DATA.cols[colB];
+  const da = DATA.dicts[colA], db = DATA.dicts[colB];
+  const counts = new Map();
+  for (const i of idxArr) {
+    const a = ca[i], b = cb[i];
+    const key = a + '|' + b;
+    const entry = counts.get(key);
+    if (entry) entry.count++; else counts.set(key, { a, b, count: 1 });
+  }
+  const arr = [...counts.values()].map(o => ({
+    a: o.a, b: o.b, count: o.count,
+    label: `${o.a === -1 ? '—' : da[o.a]} — ${o.b === -1 ? '—' : db[o.b]}`,
+  }));
+  arr.sort((x, y) => y.count - x.count);
+  return arr;
+}
 function topWithMode(idxArr, colName, colName2, topN, opts) {
   const top = countBy(idxArr, colName, opts).slice(0, topN);
   const col = DATA.cols[colName];
@@ -477,12 +496,12 @@ function renderOverview() {
 
 /* ================= Curator tab ================= */
 let curatorMS = null;
-let curatorNaprPick = null; // reset whenever curator changes so default = top direction
+let curatorPairPick = null; // "naprIdx|sintIdx", reset whenever curator changes so default = top combination
 function buildCuratorPicker() {
   const container = document.getElementById('curatorPickHolder');
   curatorMS = new MultiSelect(container, {
     label: 'Куратор', options: freqOptions('kurator'), mode: 'single', placeholder: 'Выберите куратора',
-    onChange: () => { curatorNaprPick = null; renderCuratorTab(); },
+    onChange: () => { curatorPairPick = null; renderCuratorTab(); },
   });
   // default = curator with most rows overall
   const top = freqOptions('kurator')[0];
@@ -508,31 +527,35 @@ function renderCuratorTab() {
   document.getElementById('c-count-note').textContent = `Найдено: ${mainIdx.length} обращений`;
   window.__lastCuratorMainIdx = mainIdx;
 
-  // ---- direction pill tabs ----
-  const naprTop = countBy(mainIdx, 'napr').slice(0, 14);
-  if (!curatorNaprPick || !naprTop.some(o => o.key === curatorNaprPick)) {
-    curatorNaprPick = naprTop.length ? naprTop[0].key : null;
+  // ---- Направление + Синт.группа combined pill tabs (only combinations that actually occur) ----
+  const pairTop = countByPair(mainIdx, 'napr', 'sint').slice(0, 14);
+  const pairKey = o => o.a + '|' + o.b;
+  if (!curatorPairPick || !pairTop.some(o => pairKey(o) === curatorPairPick)) {
+    curatorPairPick = pairTop.length ? pairKey(pairTop[0]) : null;
   }
   const tabsHolder = document.getElementById('c-podtema-tabs');
-  if (!naprTop.length) {
+  if (!pairTop.length) {
     tabsHolder.innerHTML = `<div class="empty-note">Нет данных за выбранный период</div>`;
   } else {
-    tabsHolder.innerHTML = naprTop.map(o => `
-      <div class="pill ${o.key === curatorNaprPick ? 'active' : ''}" data-key="${o.key}" title="${escapeHtml(o.label)}">
-        <span>${escapeHtml(o.label.length > 42 ? o.label.slice(0, 40) + '…' : o.label)}</span><span class="cnt">${o.count}</span>
+    tabsHolder.innerHTML = pairTop.map(o => `
+      <div class="pill ${pairKey(o) === curatorPairPick ? 'active' : ''}" data-key="${pairKey(o)}" title="${escapeHtml(o.label)}">
+        <span>${escapeHtml(o.label.length > 46 ? o.label.slice(0, 44) + '…' : o.label)}</span><span class="cnt">${o.count}</span>
       </div>`).join('');
     tabsHolder.querySelectorAll('.pill').forEach(p => {
-      p.addEventListener('click', () => { curatorNaprPick = Number(p.dataset.key); renderCuratorTab(); });
+      p.addEventListener('click', () => { curatorPairPick = p.dataset.key; renderCuratorTab(); });
     });
   }
 
   const note = document.getElementById('c-podtema-note');
-  if (curatorNaprPick != null) {
-    const drillMain = mainIdx.filter(i => DATA.cols.napr[i] === curatorNaprPick);
-    const drillComp = compIdx.filter(i => DATA.cols.napr[i] === curatorNaprPick);
+  if (curatorPairPick != null) {
+    const [naprKey, sintKey] = curatorPairPick.split('|').map(Number);
+    const drillMain = mainIdx.filter(i => DATA.cols.napr[i] === naprKey && DATA.cols.sint[i] === sintKey);
+    const drillComp = compIdx.filter(i => DATA.cols.napr[i] === naprKey && DATA.cols.sint[i] === sintKey);
     const drillAddr = drillMain.filter(i => DATA.cols.ulitsa[i] !== -1);
     const drillAddrComp = drillComp.filter(i => DATA.cols.ulitsa[i] !== -1);
-    note.textContent = `— ${DATA.dicts.napr[curatorNaprPick]} (${drillMain.length})`;
+    const naprLabel = naprKey === -1 ? '—' : DATA.dicts.napr[naprKey];
+    const sintLabel = sintKey === -1 ? '—' : DATA.dicts.sint[sintKey];
+    note.textContent = `— ${naprLabel} — ${sintLabel} (${drillMain.length})`;
 
     document.getElementById('c-podtemy').innerHTML = topBlockHtml(drillMain, drillComp, 'podtema', 10);
     document.getElementById('c-fakty').innerHTML = topBlockHtml(drillMain, drillComp, 'fact', 10);
