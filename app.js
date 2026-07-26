@@ -185,6 +185,7 @@ class MultiSelect {
     this.btn.addEventListener('click', (e) => { e.stopPropagation(); this._togglePanel(); });
     this.search.addEventListener('input', () => this._renderList());
     this.actions.addEventListener('click', (e) => {
+      e.stopPropagation();
       const act = e.target.dataset.act;
       if (act === 'all') this.options.forEach(o => this.selected.add(o.key));
       if (act === 'none') this.selected.clear();
@@ -213,6 +214,7 @@ class MultiSelect {
     this.list.querySelectorAll('.ms-item').forEach(item => {
       item.addEventListener('click', (e) => {
         e.preventDefault();
+        e.stopPropagation();
         const key = Number(item.dataset.key);
         if (this.mode === 'single') { this.selected.clear(); this.selected.add(key); this._closePanel(); }
         else { if (this.selected.has(key)) this.selected.delete(key); else this.selected.add(key); }
