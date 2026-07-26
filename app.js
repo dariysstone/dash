@@ -477,12 +477,12 @@ function renderOverview() {
 
 /* ================= Curator tab ================= */
 let curatorMS = null;
-let curatorPodtemaPick = null; // reset whenever curator changes so default = top subtopic
+let curatorNaprPick = null; // reset whenever curator changes so default = top direction
 function buildCuratorPicker() {
   const container = document.getElementById('curatorPickHolder');
   curatorMS = new MultiSelect(container, {
     label: 'Куратор', options: freqOptions('kurator'), mode: 'single', placeholder: 'Выберите куратора',
-    onChange: () => { curatorPodtemaPick = null; renderCuratorTab(); },
+    onChange: () => { curatorNaprPick = null; renderCuratorTab(); },
   });
   // default = curator with most rows overall
   const top = freqOptions('kurator')[0];
@@ -508,39 +508,40 @@ function renderCuratorTab() {
   document.getElementById('c-count-note').textContent = `Найдено: ${mainIdx.length} обращений`;
   window.__lastCuratorMainIdx = mainIdx;
 
-  // ---- subtopic pill tabs ----
-  const podtemaTop = countBy(mainIdx, 'podtema').slice(0, 14);
-  if (!curatorPodtemaPick || !podtemaTop.some(o => o.key === curatorPodtemaPick)) {
-    curatorPodtemaPick = podtemaTop.length ? podtemaTop[0].key : null;
+  // ---- direction pill tabs ----
+  const naprTop = countBy(mainIdx, 'napr').slice(0, 14);
+  if (!curatorNaprPick || !naprTop.some(o => o.key === curatorNaprPick)) {
+    curatorNaprPick = naprTop.length ? naprTop[0].key : null;
   }
   const tabsHolder = document.getElementById('c-podtema-tabs');
-  if (!podtemaTop.length) {
+  if (!naprTop.length) {
     tabsHolder.innerHTML = `<div class="empty-note">Нет данных за выбранный период</div>`;
   } else {
-    tabsHolder.innerHTML = podtemaTop.map(o => `
-      <div class="pill ${o.key === curatorPodtemaPick ? 'active' : ''}" data-key="${o.key}" title="${escapeHtml(o.label)}">
+    tabsHolder.innerHTML = naprTop.map(o => `
+      <div class="pill ${o.key === curatorNaprPick ? 'active' : ''}" data-key="${o.key}" title="${escapeHtml(o.label)}">
         <span>${escapeHtml(o.label.length > 42 ? o.label.slice(0, 40) + '…' : o.label)}</span><span class="cnt">${o.count}</span>
       </div>`).join('');
     tabsHolder.querySelectorAll('.pill').forEach(p => {
-      p.addEventListener('click', () => { curatorPodtemaPick = Number(p.dataset.key); renderCuratorTab(); });
+      p.addEventListener('click', () => { curatorNaprPick = Number(p.dataset.key); renderCuratorTab(); });
     });
   }
 
   const note = document.getElementById('c-podtema-note');
-  if (curatorPodtemaPick != null) {
-    const drillMain = mainIdx.filter(i => DATA.cols.podtema[i] === curatorPodtemaPick);
-    const drillComp = compIdx.filter(i => DATA.cols.podtema[i] === curatorPodtemaPick);
+  if (curatorNaprPick != null) {
+    const drillMain = mainIdx.filter(i => DATA.cols.napr[i] === curatorNaprPick);
+    const drillComp = compIdx.filter(i => DATA.cols.napr[i] === curatorNaprPick);
     const drillAddr = drillMain.filter(i => DATA.cols.ulitsa[i] !== -1);
     const drillAddrComp = drillComp.filter(i => DATA.cols.ulitsa[i] !== -1);
-    note.textContent = `— ${DATA.dicts.podtema[curatorPodtemaPick]} (${drillMain.length})`;
+    note.textContent = `— ${DATA.dicts.napr[curatorNaprPick]} (${drillMain.length})`;
 
+    document.getElementById('c-podtemy').innerHTML = topBlockHtml(drillMain, drillComp, 'podtema', 10);
     document.getElementById('c-fakty').innerHTML = topBlockHtml(drillMain, drillComp, 'fact', 10);
     document.getElementById('c-istochniki').innerHTML = topBlockHtml(drillMain, drillComp, 'istochnik', 10);
     document.getElementById('c-addresa').innerHTML = topBlockHtml(drillAddr, drillAddrComp, 'addr', 10, { modeCol: 'podtema', modeLabel: 'Гл. подтема' });
     document.getElementById('c-emails').innerHTML = topBlockHtml(drillMain, drillComp, 'email', 10, { excludeNull: true, modeCol: 'naspunkt', modeLabel: 'Насел. пункт', expandCol: 'podtema', blockId: 'c-emails', expandIdx: mainIdx });
   } else {
     note.textContent = '';
-    ['c-fakty', 'c-istochniki', 'c-addresa', 'c-emails'].forEach(id => {
+    ['c-podtemy', 'c-fakty', 'c-istochniki', 'c-addresa', 'c-emails'].forEach(id => {
       document.getElementById(id).innerHTML = `<div class="empty-note">Нет данных</div>`;
     });
   }
@@ -642,22 +643,28 @@ function init() {
 /* ================= Bootstrap: load data.json, then init the UI ================= */
 function bootstrap() {
   const loader = document.getElementById('loadingScreen');
+  const finishLoad = (data) => {
+    DATA = data;
+    BASE_DATE = new Date(DATA.baseDate + 'T00:00:00Z');
+    MAX_DAY = DATA.cols.date.reduce((a, b) => Math.max(a, b), 0);
+    MIN_DAY = DATA.cols.date.reduce((a, b) => Math.min(a, b), MAX_DAY);
+    RESOLVED_STATUS_IDX = new Set(
+      DATA.dicts.status.map((label, i) => (RESOLVED_STATUS_LABELS.has(label) ? i : null)).filter(v => v !== null)
+    );
+    if (loader) loader.remove();
+    init();
+  };
+
+  // Single-file build embeds the data directly (window.__EMBEDDED_DATA__) — use it synchronously.
+  if (window.__EMBEDDED_DATA__) { finishLoad(window.__EMBEDDED_DATA__); return; }
+
+  // Multi-file build (index.html + data.json as separate files) — fetch it at runtime.
   fetch('data.json')
     .then(r => {
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
     })
-    .then(data => {
-      DATA = data;
-      BASE_DATE = new Date(DATA.baseDate + 'T00:00:00Z');
-      MAX_DAY = DATA.cols.date.reduce((a, b) => Math.max(a, b), 0);
-      MIN_DAY = DATA.cols.date.reduce((a, b) => Math.min(a, b), MAX_DAY);
-      RESOLVED_STATUS_IDX = new Set(
-        DATA.dicts.status.map((label, i) => (RESOLVED_STATUS_LABELS.has(label) ? i : null)).filter(v => v !== null)
-      );
-      if (loader) loader.remove();
-      init();
-    })
+    .then(finishLoad)
     .catch(err => {
       console.error('Не удалось загрузить data.json', err);
       if (loader) {
