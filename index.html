@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Дашборд обращений — Солнечногорск</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="loadingScreen" class="loading-screen"><div class="loading-spinner"></div><div>Загрузка данных…</div></div>
+<div class="wrap">
+
+  <div class="topbar">
+    <div class="brand">
+      <div class="mark">ОБР</div>
+      <div>
+        <h1>Дашборд обращений граждан</h1>
+        <div class="sub">Данные: <span id="dataRange"></span> · строк: <span id="rowCount"></span></div>
+      </div>
+    </div>
+    <div class="omsu-badge"><span class="dot"></span>ОМСУ: <b id="omsuName"></b></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title"><span class="ic">◐</span>Период и фильтры</div>
+    <div class="periods">
+      <div class="field">
+        <label>Основной период</label>
+        <div class="date-pair"><input type="date" id="mainStart"><span class="to">—</span><input type="date" id="mainEnd"></div>
+      </div>
+      <div class="field">
+        <label>Период сравнения</label>
+        <div class="date-pair"><input type="date" id="compStart"><span class="to">—</span><input type="date" id="compEnd"></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" id="btnApply">⚡ Сформировать</button>
+        <button class="btn ghost" id="btnReset">↺ Сбросить всё</button>
+        <button class="btn" id="btnExport">⭳ Экспорт CSV</button>
+      </div>
+    </div>
+    <div class="filters-row" id="primaryFilters"></div>
+    <div class="more-toggle" id="moreToggle">▸ Дополнительные фильтры (Направление, Тип сообщения, Статус, Насел. пункт, Район, УК)</div>
+    <div class="more-filters" id="extraFilters"></div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-target="tab-overview">Обзор</div>
+    <div class="tab" data-target="tab-curators">По кураторам</div>
+  </div>
+
+  <!-- ===================== OVERVIEW TAB ===================== -->
+  <div class="tabpage active" id="tab-overview">
+    <div class="empty-note" style="text-align:left;padding:0 0 10px;" id="ov-range"></div>
+
+    <div class="kpis">
+      <div class="kpi" id="kpi-total"></div>
+      <div class="kpi" id="kpi-podtem"></div>
+      <div class="kpi" id="kpi-kurator"></div>
+      <div class="kpi" id="kpi-addr"></div>
+    </div>
+
+    <div class="card" style="margin-bottom:14px;">
+      <h3>Динамика по дням</h3>
+      <div class="chart-wrap"><div id="trendChart"></div></div>
+      <div class="legend"><span><i class="solid"></i>Основной период</span><span><i class="dash"></i>Период сравнения</span></div>
+    </div>
+
+    <div class="card" style="margin-bottom:14px;">
+      <h3>Топ-10 кураторов</h3><div id="ov-kuratory"></div>
+    </div>
+
+    <div class="grid4">
+      <div class="card"><h3>По направлениям</h3><div id="ov-napr"></div></div>
+      <div class="card"><h3>По источникам</h3><div id="ov-istochnik"></div></div>
+      <div class="card"><h3>Статусы обращений</h3><div id="ov-status"></div></div>
+      <div class="card"><h3>По типу сообщения</h3><div id="ov-tip"></div></div>
+    </div>
+
+    <div class="grid2">
+      <div class="card"><h3>Топ-10 подтем</h3><div id="ov-podtemy"></div></div>
+      <div class="card"><h3>Топ-10 фактов</h3><div id="ov-fakty"></div></div>
+    </div>
+
+    <div class="grid2">
+      <div class="card"><h3>Топ-10 заявителей <span class="n">клик — темы жалоб</span></h3><div id="ov-emails"></div></div>
+      <div class="card"><h3>Топ-10 адресов <span class="n">где указана улица</span></h3><div id="ov-addresa"></div></div>
+    </div>
+
+    <div class="empty-note" id="ov-count-note" style="text-align:right;"></div>
+  </div>
+
+  <!-- ===================== CURATORS TAB ===================== -->
+  <div class="tabpage" id="tab-curators">
+    <div class="curator-pick">
+      <div id="curatorPickHolder"></div>
+      <span class="curator-hint">Остальные фильтры (период, подтема, синт.группа, источник и т.д.) применяются те же, что и во вкладке «Обзор» — куратор выбирается отдельно.</span>
+    </div>
+
+    <div class="kpis">
+      <div class="kpi" id="c-kpi-total"></div>
+      <div class="kpi" id="c-kpi-podtem"></div>
+      <div class="kpi" id="c-kpi-sint"></div>
+      <div class="kpi" id="c-kpi-addr"></div>
+    </div>
+
+    <div class="card" style="margin-bottom:14px;">
+      <h3>Динамика по дням</h3>
+      <div class="chart-wrap"><div id="c-trendChart"></div></div>
+      <div class="legend"><span><i class="solid"></i>Основной период</span><span><i class="dash"></i>Период сравнения</span></div>
+    </div>
+
+    <div class="card" style="margin-bottom:14px;">
+      <h3>Разбивка по подтемам <span class="n" id="c-podtema-note"></span></h3>
+      <div class="pill-tabs" id="c-podtema-tabs"></div>
+    </div>
+
+    <div class="grid2">
+      <div class="card"><h3>Топ факты</h3><div id="c-fakty"></div></div>
+      <div class="card"><h3>Источники</h3><div id="c-istochniki"></div></div>
+    </div>
+    <div class="grid2">
+      <div class="card"><h3>Топ адреса <span class="n">где указана улица</span></h3><div id="c-addresa"></div></div>
+      <div class="card"><h3>Топ заявители <span class="n">клик — темы жалоб</span></h3><div id="c-emails"></div></div>
+    </div>
+    <div class="card" style="margin-bottom:14px;"><h3>Статусы обращений</h3><div id="c-status"></div></div>
+    <div class="empty-note" id="c-count-note" style="text-align:right;"></div>
+  </div>
+
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
