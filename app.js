@@ -1,3 +1,6 @@
+const TAB_HASHES = { 'tab-overview': 'overview', 'tab-curators': 'curators', 'tab-report': 'report' };
+const TAB_TARGETS = { overview: 'tab-overview', curators: 'tab-curators', report: 'tab-report' };
+
 /* ================= Utilities: date <-> day index ================= */
 let DATA = null;
 let BASE_DATE = null;
@@ -554,6 +557,7 @@ function renderOverview() {
 
   document.getElementById('ov-count-note').textContent = `Найдено: ${mainIdx.length} обращений`;
   window.__lastMainIdx = mainIdx; // for CSV export
+  window.__lastCompIdx = compIdx; // for the report generator
 
   try { renderTrendChart('trendChart', mainIdx, compIdx); }
   catch (e) { console.error('trend chart failed', e); document.getElementById('trendChart').closest('.chart-wrap').innerHTML = '<div class="empty-note">График недоступен (ошибка отрисовки)</div>'; }
@@ -644,6 +648,275 @@ function renderTrendChartInto(mountId, mainIdx, compIdx) {
 }
 
 /* ================= CSV export ================= */
+
+/* ================= Report ("Справка") ================= */
+function fmtNum(n) { return Math.round(n).toLocaleString('ru-RU'); }
+function pluralRu(n, forms) {
+  const abs = Math.abs(n) % 100;
+  const n1 = abs % 10;
+  if (abs > 10 && abs < 20) return forms[2];
+  if (n1 > 1 && n1 < 5) return forms[1];
+  if (n1 === 1) return forms[0];
+  return forms[2];
+}
+function pctText(pct) { return `${pct > 0 ? '+' : ''}${pct}%`; }
+
+// Per-key dynamics list (main vs comparison count) for a given column — the base data for every ranking table.
+function computeDynList(mainIdx, compIdx, colName, opts) {
+  opts = opts || {};
+  const mainCounts = countBy(mainIdx, colName, opts);
+  const compCounts = countBy(compIdx, colName, opts);
+  const mainMap = new Map(mainCounts.map(o => [o.key, o.count]));
+  const compMap = new Map(compCounts.map(o => [o.key, o.count]));
+  const dict = DATA.dicts[colName];
+  const keys = new Set([...mainMap.keys(), ...compMap.keys()]);
+  const rows = [];
+  keys.forEach(k => {
+    const mc = mainMap.get(k) || 0;
+    const cc = compMap.get(k) || 0;
+    const dyn = dynamics(mc, cc);
+    rows.push({ key: k, label: k === -1 ? '(не указано)' : dict[k], mainCount: mc, compCount: cc, delta: dyn.delta, pct: dyn.pct });
+  });
+  return rows;
+}
+function reportRowClass(pct) { return pct >= 30 ? 'r-row-crit' : (pct <= -20 ? 'r-row-good' : ''); }
+function growthBadgeHtml(pct) {
+  if (pct >= 100) return '<span class="r-badge crit">КРИТИЧЕСКИЙ ПРИРОСТ</span>';
+  if (pct >= 30) return '<span class="r-badge crit">ЗНАЧИТЕЛЬНЫЙ ПРИРОСТ</span>';
+  return '';
+}
+function declineBadgeHtml(pct) { return pct <= -30 ? '<span class="r-badge good">СНИЖЕНИЕ</span>' : ''; }
+
+function dynTableHtml(rows, colLabel) {
+  if (!rows.length) return `<div class="empty-note">Нет данных</div>`;
+  return `<div class="r-table-wrap"><table>
+    <thead><tr><th style="width:34px">№</th><th>${escapeHtml(colLabel)}</th><th style="width:110px">Сравнение</th><th style="width:110px">Основной</th><th style="width:100px">Динамика</th></tr></thead>
+    <tbody>${rows.map((r, i) => `
+      <tr class="${reportRowClass(r.pct)}">
+        <td class="r-rank">${String(i + 1).padStart(2, '0')}</td>
+        <td>${escapeHtml(r.label)}${r.delta >= 0 ? growthBadgeHtml(r.pct) : declineBadgeHtml(r.pct)}</td>
+        <td class="r-num">${fmtNum(r.compCount)}</td>
+        <td class="r-num">${fmtNum(r.mainCount)}</td>
+        <td class="r-delta ${r.delta >= 0 ? 'bad' : 'good'}">${pctText(r.pct)}</td>
+      </tr>`).join('')}</tbody>
+  </table></div>`;
+}
+
+function renderReport(mainIdx, compIdx) {
+  const root = document.getElementById('reportRoot');
+  if (!root || !mainIdx) return;
+
+  // ---- scope detection from the currently active global filters ----
+  const kuratorSel = msWidgets.kurator.getSelected();
+  const podtemaSel = msWidgets.podtema.getSelected();
+  const sintSel = msWidgets.sint.getSelected();
+  const isOverall = !(kuratorSel && kuratorSel.size === 1);
+  const scopeChips = [];
+  if (kuratorSel && kuratorSel.size === 1) scopeChips.push(`Куратор: ${DATA.dicts.kurator[[...kuratorSel][0]]}`);
+  if (sintSel && sintSel.size === 1) scopeChips.push(`Синт.группа: ${DATA.dicts.sint[[...sintSel][0]]}`);
+  if (podtemaSel && podtemaSel.size === 1) scopeChips.push(`Подтема: ${DATA.dicts.podtema[[...podtemaSel][0]]}`);
+  const scopeTitle = scopeChips.length ? scopeChips.join(' · ') : 'все кураторы и темы';
+  const titleMain = scopeChips.length ? scopeChips[scopeChips.length - 1].split(': ')[1] : 'Сводная аналитика';
+
+  const total = mainIdx.length, totalComp = compIdx.length;
+  const dyn = dynamics(total, totalComp);
+  const mainAddr = mainIdx.filter(i => DATA.cols.ulitsa[i] !== -1);
+  const compAddr = compIdx.filter(i => DATA.cols.ulitsa[i] !== -1);
+  let resolved = 0;
+  for (const i of mainIdx) if (RESOLVED_STATUS_IDX.has(DATA.cols.status[i])) resolved++;
+  const resolvedPct = total ? Math.round(resolved / total * 1000) / 10 : 0;
+
+  const periodTxt = `${fmtDateRu(dayToISO(state.mainStart))} – ${fmtDateRu(dayToISO(state.mainEnd))}`;
+  const compTxt = `${fmtDateRu(dayToISO(state.compStart))} – ${fmtDateRu(dayToISO(state.compEnd))}`;
+
+  // ---- rankings ----
+  const podtemaDyn = computeDynList(mainIdx, compIdx, 'podtema');
+  const growthPodtema = podtemaDyn.filter(r => r.delta > 0 && r.mainCount >= 5).sort((a, b) => b.pct - a.pct).slice(0, 6);
+  const declinePodtema = podtemaDyn.filter(r => r.delta < 0 && r.compCount >= 5).sort((a, b) => a.pct - b.pct).slice(0, 6);
+
+  const kuratorDyn = isOverall ? computeDynList(mainIdx, compIdx, 'kurator').sort((a, b) => b.mainCount - a.mainCount).slice(0, 8) : [];
+
+  const addrDyn = computeDynList(mainAddr, compAddr, 'addr').sort((a, b) => b.mainCount - a.mainCount).slice(0, 8);
+  const addrGrowth = computeDynList(mainAddr, compAddr, 'addr').filter(r => r.delta > 0 && r.mainCount >= 5).sort((a, b) => b.pct - a.pct).slice(0, 4);
+
+  const topEmails = topWithMode(mainIdx, 'email', 'naspunkt', 10, { excludeNull: true });
+
+  const naprTop = countBy(mainIdx, 'napr').slice(0, 5);
+  const istochnikTop = countBy(mainIdx, 'istochnik').slice(0, 5);
+  const tipTop = countBy(mainIdx, 'tip').slice(0, 5);
+
+  // ---- narrative takeaways ----
+  const takeaways = [];
+  takeaways.push(`За период <strong>${periodTxt}</strong> по выбранному срезу (${escapeHtml(scopeTitle)}) поступило <strong>${fmtNum(total)}</strong> ${pluralRu(total, ['обращение', 'обращения', 'обращений'])} против <strong>${fmtNum(totalComp)}</strong> за ${compTxt} — ${dyn.delta >= 0 ? `рост <span class="r-pct-bad">${pctText(dyn.pct)} (${dyn.delta >= 0 ? '+' : ''}${fmtNum(dyn.delta)})</span>` : `снижение <span class="r-pct-good">${pctText(dyn.pct)} (${fmtNum(dyn.delta)})</span>`}.`);
+  if (growthPodtema.length) {
+    const g = growthPodtema[0];
+    takeaways.push(`Наибольший прирост среди подтем — <strong>«${escapeHtml(g.label)}»</strong>: ${fmtNum(g.compCount)} → ${fmtNum(g.mainCount)} <span class="r-pct-bad">${pctText(g.pct)}</span>.`);
+  }
+  if (declinePodtema.length) {
+    const d = declinePodtema[0];
+    takeaways.push(`Заметнее всего снизилась подтема <strong>«${escapeHtml(d.label)}»</strong>: ${fmtNum(d.compCount)} → ${fmtNum(d.mainCount)} <span class="r-pct-good">${pctText(d.pct)}</span>.`);
+  }
+  if (isOverall && kuratorDyn.length) {
+    const k = kuratorDyn[0];
+    const share = total ? Math.round(k.mainCount / total * 1000) / 10 : 0;
+    takeaways.push(`Больше всего обращений закреплено за куратором <strong>«${escapeHtml(k.label)}»</strong> — ${fmtNum(k.mainCount)} (${share}% от общего числа).`);
+  }
+  if (addrGrowth.length) {
+    const a = addrGrowth[0];
+    takeaways.push(`Резкий рост обращений по конкретному адресу: <strong>${escapeHtml(a.label)}</strong> — ${fmtNum(a.compCount)} → ${fmtNum(a.mainCount)} <span class="r-pct-bad">${pctText(a.pct)}</span>, стоит проверить точечно.`);
+  }
+  takeaways.push(`Доля обращений в статусе «Решено» — <strong>${resolvedPct}%</strong> (${fmtNum(resolved)} из ${fmtNum(total)}), доля «В работе» — <strong>${Math.round((100 - resolvedPct) * 10) / 10}%</strong>.`);
+
+  // ---- assemble HTML ----
+  const html = `
+  <div class="report-scope">
+    <div class="r-toolbar no-print">
+      <button type="button" class="r-print-btn" id="r-print-btn">🖨 Печать / PDF</button>
+    </div>
+
+    <header class="r-header">
+      <div>
+        <div class="r-meta">Дашборд обращений граждан · Аналитическая справка · ${new Date().toLocaleDateString('ru-RU')}</div>
+        <h1>${escapeHtml(DATA.omsu)} <span>· ${escapeHtml(titleMain)}</span></h1>
+        <div class="r-sub">Анализ обращений за период ${periodTxt} в сравнении с ${compTxt}. Срез: ${escapeHtml(scopeTitle)}.</div>
+      </div>
+      <div class="r-header-stats">
+        <div><div class="r-hstat-label">Всего обращений</div><div class="r-hstat-value">${fmtNum(total)}</div></div>
+        <div><div class="r-hstat-label">Динамика</div><div class="r-hstat-value">${pctText(dyn.pct)}</div></div>
+        <div><div class="r-hstat-label">Решено</div><div class="r-hstat-value">${resolvedPct}%</div></div>
+      </div>
+    </header>
+
+    <div class="r-block r-toc-block">
+      <div class="r-tag"><span class="n">01</span> Содержание справки</div>
+      <h2>Структура документа</h2>
+      <div class="r-toc-grid">
+        <div class="r-toc-item"><span class="r-toc-num">01</span><span>Ключевые выводы</span></div>
+        <div class="r-toc-item"><span class="r-toc-num">02</span><span>Общая динамика обращений</span></div>
+        <div class="r-toc-item"><span class="r-toc-num">03</span><span>Подтемы с наибольшим приростом и снижением</span></div>
+        ${isOverall ? `<div class="r-toc-item"><span class="r-toc-num">04</span><span>Рейтинг кураторов по объёму</span></div>` : ''}
+        <div class="r-toc-item"><span class="r-toc-num">05</span><span>Адреса — объём и точки роста</span></div>
+        <div class="r-toc-item"><span class="r-toc-num">06</span><span>Активные заявители</span></div>
+        <div class="r-toc-item"><span class="r-toc-num">07</span><span>Направления, источники, тип сообщения</span></div>
+        <div class="r-toc-item"><span class="r-toc-num">08</span><span>Итоговая сводка</span></div>
+      </div>
+    </div>
+
+    <div class="r-block r-takeaways">
+      <div class="r-tag"><span class="n">01</span> Ключевые выводы · саммари</div>
+      <h2>Основные итоги отчётного периода</h2>
+      <p class="r-desc">Главные показатели и тенденции по срезу «${escapeHtml(scopeTitle)}» для управленческого решения.</p>
+      ${takeaways.map((t, i) => `<div class="r-takeaway"><div class="r-takeaway-num">${String(i + 1).padStart(2, '0')}</div><div class="r-takeaway-text">${t}</div></div>`).join('')}
+    </div>
+
+    <div class="r-block">
+      <div class="r-tag"><span class="n">02</span> Общая динамика</div>
+      <h2>${fmtNum(total)} ${pluralRu(total, ['обращение', 'обращения', 'обращений'])}</h2>
+      <p class="r-desc">Сопоставление объёма и ключевых счётчиков за основной период и период сравнения.</p>
+      <div class="r-stat-grid">
+        <div class="r-stat-card ${dyn.delta >= 0 ? 'bad' : 'good'}">
+          <div class="r-stat-label">Всего обращений</div>
+          <div class="r-stat-value">${fmtNum(total)}</div>
+          <div class="r-stat-compare">Сравнение: ${fmtNum(totalComp)} · <span class="${dyn.delta >= 0 ? 'r-pct-bad' : 'r-pct-good'}" style="padding:0;background:none;border:none;">${pctText(dyn.pct)}</span></div>
+        </div>
+        <div class="r-stat-card">
+          <div class="r-stat-label">Решено</div>
+          <div class="r-stat-value">${resolvedPct}%</div>
+          <div class="r-stat-compare">${fmtNum(resolved)} из ${fmtNum(total)}</div>
+        </div>
+        <div class="r-stat-card">
+          <div class="r-stat-label">Кураторов</div>
+          <div class="r-stat-value">${distinctCount(mainIdx, 'kurator')}</div>
+          <div class="r-stat-compare">задействовано за период</div>
+        </div>
+        <div class="r-stat-card">
+          <div class="r-stat-label">Адресов с улицей</div>
+          <div class="r-stat-value">${distinctCount(mainAddr, 'addr')}</div>
+          <div class="r-stat-compare">уникальных за период</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="r-block">
+      <div class="r-tag"><span class="n">03</span> Подтемы · рост и снижение</div>
+      <h2>Где хуже, а где лучше</h2>
+      <p class="r-desc">Подтемы с наибольшим приростом (внимание требуется в первую очередь) и наибольшим снижением (то, что уже улучшается) относительно периода сравнения.</p>
+      <div class="r-grid2">
+        <div><h3>Наибольший прирост</h3>${dynTableHtml(growthPodtema, 'Подтема')}</div>
+        <div><h3>Наибольшее снижение</h3>${dynTableHtml(declinePodtema, 'Подтема')}</div>
+      </div>
+    </div>
+
+    ${isOverall ? `
+    <div class="r-block">
+      <div class="r-tag"><span class="n">04</span> Кураторы</div>
+      <h2>Рейтинг кураторов по объёму</h2>
+      <p class="r-desc">Кураторы, на которых приходится больше всего обращений за основной период, с динамикой к периоду сравнения.</p>
+      ${dynTableHtml(kuratorDyn, 'Куратор')}
+    </div>` : ''}
+
+    <div class="r-block">
+      <div class="r-tag"><span class="n">05</span> Адреса</div>
+      <h2>Адреса — объём и точки роста</h2>
+      <p class="r-desc">Учитываются только обращения, где указана улица. Слева — адреса с наибольшим числом обращений, справа — адреса с самым резким приростом (потенциальные новые проблемные точки).</p>
+      <div class="r-grid2">
+        <div><h3>По объёму</h3>${dynTableHtml(addrDyn, 'Адрес')}</div>
+        <div><h3>Резкий прирост</h3>${dynTableHtml(addrGrowth, 'Адрес')}</div>
+      </div>
+    </div>
+
+    <div class="r-block">
+      <div class="r-tag"><span class="n">06</span> Заявители</div>
+      <h2>Активные заявители</h2>
+      <p class="r-desc">Топ-10 заявителей по количеству обращений за основной период.</p>
+      <div class="r-cards-grid">
+        <div class="r-info-card">
+          <div class="r-info-card-meta">Топ-10 заявителей · ${escapeHtml(scopeTitle)}</div>
+          ${topEmails.map((e, i) => `<div class="r-info-row"><span class="r-info-rank">${String(i + 1).padStart(2, '0')}</span><span class="r-info-text" title="${escapeHtml(e.label)}">${escapeHtml(e.label)}</span><span class="r-info-count">${e.count}</span></div>`).join('') || '<div class="empty-note">Нет данных</div>'}
+        </div>
+      </div>
+    </div>
+
+    <div class="r-block">
+      <div class="r-tag"><span class="n">07</span> Разбивка</div>
+      <h2>Направления, источники, тип сообщения</h2>
+      <div class="r-grid2">
+        <div><h3>Направления</h3>${barTableHtml(naprTop)}</div>
+        <div><h3>Источники</h3>${barTableHtml(istochnikTop)}</div>
+      </div>
+      <h3>Тип сообщения</h3>${barTableHtml(tipTop)}
+    </div>
+
+    <div class="r-block">
+      <div class="r-tag"><span class="n">08</span> Итог</div>
+      <h2>Итоговая сводка</h2>
+      <p class="r-desc">Краткое резюме по срезу «${escapeHtml(scopeTitle)}» за ${periodTxt}.</p>
+      <div class="r-callout ${dyn.delta >= 0 ? 'bad' : ''}">
+        <div class="r-callout-icon">${dyn.delta >= 0 ? '↑' : '↓'}</div>
+        <div class="r-callout-text"><strong>Итог:</strong> обращения по срезу «${escapeHtml(scopeTitle)}» ${dyn.delta >= 0 ? 'выросли' : 'снизились'} с ${fmtNum(totalComp)} до ${fmtNum(total)} (${pctText(dyn.pct)}).
+        ${growthPodtema.length ? ` Наибольшего внимания требует подтема «${escapeHtml(growthPodtema[0].label)}» (${pctText(growthPodtema[0].pct)}).` : ''}
+        ${declinePodtema.length ? ` Заметно улучшилась ситуация по теме «${escapeHtml(declinePodtema[0].label)}» (${pctText(declinePodtema[0].pct)}).` : ''}</div>
+      </div>
+    </div>
+
+    <div class="r-footer">Дашборд обращений граждан · ${escapeHtml(DATA.omsu)} · Отчётный период: ${periodTxt} в сопоставлении с ${compTxt} · Срез: ${escapeHtml(scopeTitle)} · Сформировано ${new Date().toLocaleString('ru-RU')}</div>
+  </div>`;
+
+  root.innerHTML = html;
+  const printBtn = document.getElementById('r-print-btn');
+  if (printBtn) printBtn.addEventListener('click', () => window.print());
+}
+
+function barTableHtml(rows) {
+  if (!rows.length) return `<div class="empty-note">Нет данных</div>`;
+  const max = rows[0].count;
+  return `<div class="r-table-wrap"><table>
+    <thead><tr><th>Значение</th><th style="width:90px">Кол-во</th><th style="width:80px">Доля</th></tr></thead>
+    <tbody>${rows.map(o => `<tr><td>${escapeHtml(o.label)}</td><td class="r-num">${fmtNum(o.count)}</td><td class="r-num">${Math.round(o.count / max * 100)}%</td></tr>`).join('')}</tbody>
+  </table></div>`;
+}
+
+
 function exportCsv() {
   const idxArr = window.__lastMainIdx || [];
   const cols = ['date', 'napr', 'sint', 'fact', 'podtema', 'status', 'kurator', 'ispolnitel', 'tip', 'istochnik', 'uk', 'addr', 'naspunkt', 'rayon', 'email', 'spam'];
@@ -684,6 +957,7 @@ function applyAll() {
   readDateInputs();
   renderOverview();
   renderCuratorTab();
+  renderReport(window.__lastMainIdx, window.__lastCompIdx);
 }
 
 function resetFilters() {
@@ -723,14 +997,25 @@ function init() {
     document.getElementById('moreToggle').classList.toggle('open');
   });
 
-  document.querySelectorAll('.tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-      document.querySelectorAll('.tabpage').forEach(p => p.classList.remove('active'));
-      tab.classList.add('active');
-      document.getElementById(tab.dataset.target).classList.add('active');
-    });
+  function switchTab(targetId, pushHash) {
+    document.querySelectorAll('.tab, .app-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tabpage').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll(`.tab[data-target="${targetId}"], .app-tab[data-target="${targetId}"]`).forEach(t => t.classList.add('active'));
+    const page = document.getElementById(targetId);
+    if (page) page.classList.add('active');
+    if (pushHash !== false) {
+      const hash = TAB_HASHES[targetId] || '';
+      if (hash) { try { history.replaceState(null, '', '#' + hash); } catch (e) {} }
+    }
+  }
+  window.__switchTab = switchTab;
+
+  document.querySelectorAll('.tab, .app-tab').forEach(tab => {
+    tab.addEventListener('click', () => switchTab(tab.dataset.target));
   });
+
+  const hashTarget = TAB_TARGETS[(location.hash || '').replace(/^#/, '')];
+  if (hashTarget) switchTab(hashTarget, false);
 
   applyAll();
 }
@@ -754,7 +1039,7 @@ function bootstrap() {
   if (window.__EMBEDDED_DATA__) { finishLoad(window.__EMBEDDED_DATA__); return; }
 
   // Multi-file build (index.html + data.json as separate files) — fetch it at runtime.
-  fetch('data.json')
+  fetch('data.json?t=' + Date.now(), { cache: 'no-store' })
     .then(r => {
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
