@@ -687,14 +687,40 @@ function growthBadgeHtml(pct) {
 }
 function declineBadgeHtml(pct) { return pct <= -30 ? '<span class="r-badge good">СНИЖЕНИЕ</span>' : ''; }
 
-function dynTableHtml(rows, colLabel) {
+// Attaches "what residents mostly complained about" to each ranking row (e.g. dominant podtema per address/curator).
+function attachMode(rows, idxArr, colName, modeCol) {
+  const col = DATA.cols[colName];
+  const col2 = DATA.cols[modeCol];
+  const dict2 = DATA.dicts[modeCol];
+  rows.forEach(r => {
+    const modeCounts = new Map();
+    for (const i of idxArr) {
+      if (col[i] !== r.key) continue;
+      const v2 = col2[i];
+      modeCounts.set(v2, (modeCounts.get(v2) || 0) + 1);
+    }
+    let bestK = null, bestC = -1;
+    for (const [k, c] of modeCounts.entries()) { if (c > bestC) { bestC = c; bestK = k; } }
+    r.modeLabel = (bestK == null || bestK === -1) ? null : dict2[bestK];
+  });
+  return rows;
+}
+// Short "chiefly complained about X and Y" phrase for section intros, computed straight from the data.
+function topThemePhrase(idxArr, colName, topN) {
+  const top = countBy(idxArr, colName, { excludeNull: true }).slice(0, topN || 2);
+  if (!top.length) return '';
+  return top.map(o => `«${o.label}»`).join(' и ');
+}
+
+function dynTableHtml(rows, colLabel, opts) {
+  opts = opts || {};
   if (!rows.length) return `<div class="empty-note">Нет данных</div>`;
   return `<div class="r-table-wrap"><table>
     <thead><tr><th style="width:34px">№</th><th>${escapeHtml(colLabel)}</th><th style="width:110px">Сравнение</th><th style="width:110px">Основной</th><th style="width:100px">Динамика</th></tr></thead>
     <tbody>${rows.map((r, i) => `
       <tr class="${reportRowClass(r.pct)}">
         <td class="r-rank">${String(i + 1).padStart(2, '0')}</td>
-        <td>${escapeHtml(r.label)}${r.delta >= 0 ? growthBadgeHtml(r.pct) : declineBadgeHtml(r.pct)}</td>
+        <td>${escapeHtml(r.label)}${r.delta >= 0 ? growthBadgeHtml(r.pct) : declineBadgeHtml(r.pct)}${r.modeLabel ? `<div class="r-sub">${escapeHtml(opts.modeLabel || 'Чаще всего')}: ${escapeHtml(r.modeLabel)}</div>` : ''}</td>
         <td class="r-num">${fmtNum(r.compCount)}</td>
         <td class="r-num">${fmtNum(r.mainCount)}</td>
         <td class="r-delta ${r.delta >= 0 ? 'bad' : 'good'}">${pctText(r.pct)}</td>
@@ -731,19 +757,26 @@ function renderReport(mainIdx, compIdx) {
 
   // ---- rankings ----
   const podtemaDyn = computeDynList(mainIdx, compIdx, 'podtema');
-  const growthPodtema = podtemaDyn.filter(r => r.delta > 0 && r.mainCount >= 5).sort((a, b) => b.pct - a.pct).slice(0, 6);
-  const declinePodtema = podtemaDyn.filter(r => r.delta < 0 && r.compCount >= 5).sort((a, b) => a.pct - b.pct).slice(0, 6);
+  const growthPodtema = attachMode(podtemaDyn.filter(r => r.delta > 0 && r.mainCount >= 5).sort((a, b) => b.pct - a.pct).slice(0, 6), mainIdx, 'podtema', 'fact');
+  const declinePodtema = attachMode(podtemaDyn.filter(r => r.delta < 0 && r.compCount >= 5).sort((a, b) => a.pct - b.pct).slice(0, 6), mainIdx, 'podtema', 'fact');
 
-  const kuratorDyn = isOverall ? computeDynList(mainIdx, compIdx, 'kurator').sort((a, b) => b.mainCount - a.mainCount).slice(0, 8) : [];
+  const kuratorDyn = isOverall ? attachMode(computeDynList(mainIdx, compIdx, 'kurator').sort((a, b) => b.mainCount - a.mainCount).slice(0, 8), mainIdx, 'kurator', 'podtema') : [];
 
-  const addrDyn = computeDynList(mainAddr, compAddr, 'addr').sort((a, b) => b.mainCount - a.mainCount).slice(0, 8);
-  const addrGrowth = computeDynList(mainAddr, compAddr, 'addr').filter(r => r.delta > 0 && r.mainCount >= 5).sort((a, b) => b.pct - a.pct).slice(0, 4);
+  const addrDyn = attachMode(computeDynList(mainAddr, compAddr, 'addr').sort((a, b) => b.mainCount - a.mainCount).slice(0, 8), mainAddr, 'addr', 'podtema');
+  const addrGrowth = attachMode(computeDynList(mainAddr, compAddr, 'addr').filter(r => r.delta > 0 && r.mainCount >= 5).sort((a, b) => b.pct - a.pct).slice(0, 4), mainAddr, 'addr', 'podtema');
 
-  const topEmails = topWithMode(mainIdx, 'email', 'naspunkt', 10, { excludeNull: true });
+  const topEmails = topWithMode(mainIdx, 'email', 'podtema', 10, { excludeNull: true });
 
   const naprTop = countBy(mainIdx, 'napr').slice(0, 5);
   const istochnikTop = countBy(mainIdx, 'istochnik').slice(0, 5);
   const tipTop = countBy(mainIdx, 'tip').slice(0, 5);
+
+  // "What's actually behind the numbers" phrases — used in section intros instead of methodology explanations
+  const addrThemePhrase = topThemePhrase(mainAddr, 'podtema', 2);
+  const growthKeySet = new Set(growthPodtema.map(r => r.key));
+  const growthFactPhrase = growthKeySet.size ? topThemePhrase(mainIdx.filter(i => growthKeySet.has(DATA.cols.podtema[i])), 'fact', 2) : '';
+  const emailThemePhrase = topThemePhrase(mainIdx, 'podtema', 2);
+  const kuratorThemePhrase = kuratorDyn.length ? kuratorDyn[0].modeLabel : '';
 
   // ---- narrative takeaways ----
   const takeaways = [];
@@ -840,10 +873,10 @@ function renderReport(mainIdx, compIdx) {
     <div class="r-block">
       <div class="r-tag"><span class="n">03</span> Подтемы · рост и снижение</div>
       <h2>Где хуже, а где лучше</h2>
-      <p class="r-desc">Подтемы с наибольшим приростом (внимание требуется в первую очередь) и наибольшим снижением (то, что уже улучшается) относительно периода сравнения.</p>
+      <p class="r-desc">${growthFactPhrase ? `Внутри растущих подтем чаще всего встречаются жалобы на ${growthFactPhrase}.` : 'Подтемы с наибольшим приростом и наибольшим снижением относительно периода сравнения.'}</p>
       <div class="r-grid2">
-        <div><h3>Наибольший прирост</h3>${dynTableHtml(growthPodtema, 'Подтема')}</div>
-        <div><h3>Наибольшее снижение</h3>${dynTableHtml(declinePodtema, 'Подтема')}</div>
+        <div><h3>Наибольший прирост</h3>${dynTableHtml(growthPodtema, 'Подтема', { modeLabel: 'Чаще всего' })}</div>
+        <div><h3>Наибольшее снижение</h3>${dynTableHtml(declinePodtema, 'Подтема', { modeLabel: 'Чаще всего' })}</div>
       </div>
     </div>
 
@@ -851,28 +884,28 @@ function renderReport(mainIdx, compIdx) {
     <div class="r-block">
       <div class="r-tag"><span class="n">04</span> Кураторы</div>
       <h2>Рейтинг кураторов по объёму</h2>
-      <p class="r-desc">Кураторы, на которых приходится больше всего обращений за основной период, с динамикой к периоду сравнения.</p>
-      ${dynTableHtml(kuratorDyn, 'Куратор')}
+      <p class="r-desc">${kuratorThemePhrase ? `У куратора-лидера чаще всего жители жалуются на ${kuratorThemePhrase}.` : 'Кураторы с наибольшим объёмом обращений за основной период.'}</p>
+      ${dynTableHtml(kuratorDyn, 'Куратор', { modeLabel: 'Чаще всего' })}
     </div>` : ''}
 
     <div class="r-block">
       <div class="r-tag"><span class="n">05</span> Адреса</div>
       <h2>Адреса — объём и точки роста</h2>
-      <p class="r-desc">Учитываются только обращения, где указана улица. Слева — адреса с наибольшим числом обращений, справа — адреса с самым резким приростом (потенциальные новые проблемные точки).</p>
+      <p class="r-desc">${addrThemePhrase ? `По адресам-лидерам чаще всего фигурируют жалобы на ${addrThemePhrase}. Справа — адреса с резким приростом обращений, потенциальные новые проблемные точки.` : 'Адреса с наибольшим числом обращений и наибольшим приростом.'}</p>
       <div class="r-grid2">
-        <div><h3>По объёму</h3>${dynTableHtml(addrDyn, 'Адрес')}</div>
-        <div><h3>Резкий прирост</h3>${dynTableHtml(addrGrowth, 'Адрес')}</div>
+        <div><h3>По объёму</h3>${dynTableHtml(addrDyn, 'Адрес', { modeLabel: 'Жалуются на' })}</div>
+        <div><h3>Резкий прирост</h3>${dynTableHtml(addrGrowth, 'Адрес', { modeLabel: 'Жалуются на' })}</div>
       </div>
     </div>
 
     <div class="r-block">
       <div class="r-tag"><span class="n">06</span> Заявители</div>
       <h2>Активные заявители</h2>
-      <p class="r-desc">Топ-10 заявителей по количеству обращений за основной период.</p>
+      <p class="r-desc">${emailThemePhrase ? `Чаще всего активные заявители пишут по теме ${emailThemePhrase}.` : 'Топ-10 заявителей по количеству обращений за основной период.'}</p>
       <div class="r-cards-grid">
         <div class="r-info-card">
           <div class="r-info-card-meta">Топ-10 заявителей · ${escapeHtml(scopeTitle)}</div>
-          ${topEmails.map((e, i) => `<div class="r-info-row"><span class="r-info-rank">${String(i + 1).padStart(2, '0')}</span><span class="r-info-text" title="${escapeHtml(e.label)}">${escapeHtml(e.label)}</span><span class="r-info-count">${e.count}</span></div>`).join('') || '<div class="empty-note">Нет данных</div>'}
+          ${topEmails.map((e, i) => `<div class="r-info-row"><span class="r-info-rank">${String(i + 1).padStart(2, '0')}</span><span class="r-info-text"><span class="r-info-email" title="${escapeHtml(e.label)}">${escapeHtml(e.label)}</span>${e.modeLabel ? `<div class="r-sub">Жалуется на: ${escapeHtml(e.modeLabel)}</div>` : ''}</span><span class="r-info-count">${e.count}</span></div>`).join('') || '<div class="empty-note">Нет данных</div>'}
         </div>
       </div>
     </div>
@@ -880,11 +913,18 @@ function renderReport(mainIdx, compIdx) {
     <div class="r-block">
       <div class="r-tag"><span class="n">07</span> Разбивка</div>
       <h2>Направления, источники, тип сообщения</h2>
+      <p class="r-desc">${naprTop.length ? `Больше всего обращений приходится на направление «${escapeHtml(naprTop[0].label)}»${istochnikTop.length ? `, основной канал поступления — «${escapeHtml(istochnikTop[0].label)}»` : ''}.` : ''}</p>
       <div class="r-grid2">
         <div><h3>Направления</h3>${barTableHtml(naprTop)}</div>
         <div><h3>Источники</h3>${barTableHtml(istochnikTop)}</div>
       </div>
       <h3>Тип сообщения</h3>${barTableHtml(tipTop)}
+    </div>
+
+    <div class="r-block">
+      <div class="r-tag"><span class="n">99</span> Развитие справки</div>
+      <h2>Что можно добавить дальше</h2>
+      <p class="r-desc">Текст обращения («Описание») сейчас не включён в данные дашборда — только категории (подтема/факт/направление). Чтобы оценивать социальную значимость и тональность обращений по самому тексту, нужно отдельно подключить анализ текста: это заметно увеличит объём данных и потребует отдельного шага обработки. Если это актуально — можно обсудить отдельно, как лучше это сделать.</p>
     </div>
 
     <div class="r-block">

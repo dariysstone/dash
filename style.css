@@ -338,6 +338,7 @@ canvas{max-width:100%;}
 .report-scope td.r-delta.bad{color:var(--r-up-strong);}
 .report-scope td.r-delta.good{color:var(--r-down-strong);}
 .report-scope td.r-rank{font-family:'JetBrains Mono',monospace; color:var(--r-blue-700); width:34px; font-weight:700; text-align:center;}
+.report-scope .r-sub{font-size:10.5px; color:var(--r-text-dim); font-weight:500; margin-top:2px;}
 .report-scope tbody tr.r-row-crit td{background:var(--r-up-bg-row) !important;}
 .report-scope tbody tr.r-row-crit td:first-child{border-left:3px solid var(--r-up);}
 .report-scope tbody tr.r-row-good td{background:var(--r-down-bg-row) !important;}
@@ -366,10 +367,12 @@ canvas{max-width:100%;}
 @media(max-width:760px){.report-scope .r-cards-grid{grid-template-columns:1fr;}}
 .report-scope .r-info-card{background:var(--r-blue-50); border:1px solid var(--r-blue-100); border-radius:10px; padding:16px 18px;}
 .report-scope .r-info-card-meta{font-family:'JetBrains Mono',monospace; font-size:10.5px; color:var(--r-text-dim); margin-bottom:10px; font-weight:600;}
-.report-scope .r-info-row{display:grid; grid-template-columns:24px 1fr auto; gap:9px; align-items:center; padding:5px 0; font-size:12.5px;}
-.report-scope .r-info-rank{font-family:'JetBrains Mono',monospace; color:var(--r-blue-700); font-weight:700; font-size:11px;}
-.report-scope .r-info-text{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--r-text);}
-.report-scope .r-info-count{font-family:'JetBrains Mono',monospace; font-weight:700; color:var(--r-text-strong);}
+.report-scope .r-info-row{display:grid; grid-template-columns:24px 1fr auto; gap:9px; align-items:start; padding:7px 0; font-size:12.5px; border-bottom:1px solid var(--r-border-soft);}
+.report-scope .r-info-row:last-child{border-bottom:none;}
+.report-scope .r-info-rank{font-family:'JetBrains Mono',monospace; color:var(--r-blue-700); font-weight:700; font-size:11px; padding-top:1px;}
+.report-scope .r-info-text{overflow:hidden; color:var(--r-text); min-width:0;}
+.report-scope .r-info-email{display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.report-scope .r-info-count{font-family:'JetBrains Mono',monospace; font-weight:700; color:var(--r-text-strong); padding-top:1px;}
 
 .report-scope .r-footer{
   text-align:center; color:var(--r-text-dim); font-size:11px; padding:16px 0 4px; font-family:'JetBrains Mono',monospace;
