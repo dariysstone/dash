@@ -899,8 +899,10 @@ function renderReport(mainIdx, compIdx) {
 
   const topEmails = topWithMode(mainIdx, 'email', 'podtema', 10, { excludeNull: true });
 
+  const factsTop = attachMode(computeDynList(mainIdx, compIdx, 'fact').sort((a, b) => b.mainCount - a.mainCount).slice(0, 8), mainIdx, 'fact', 'addr');
+
   const naprTop = countBy(mainIdx, 'napr').slice(0, 5);
-  const istochnikTop = countBy(mainIdx, 'istochnik').slice(0, 5);
+  const istochnikTop = countBy(mainIdx, 'istochnik').slice(0, 8);
   const tipTop = countBy(mainIdx, 'tip').slice(0, 5);
 
   // "What's actually behind the numbers" phrases — used in section intros instead of methodology explanations
@@ -1010,6 +1012,8 @@ function renderReport(mainIdx, compIdx) {
         <div><h3>Наибольший прирост</h3>${dynTableHtml(growthPodtema, 'Подтема', { modeLabel: 'Чаще всего' })}</div>
         <div><h3>Наибольшее снижение</h3>${dynTableHtml(declinePodtema, 'Подтема', { modeLabel: 'Чаще всего' })}</div>
       </div>
+      <h3>Топ фактов</h3>
+      ${dynTableHtml(factsTop, 'Факт', { modeLabel: 'Адрес' })}
     </div>
 
     ${isOverall ? `
@@ -1046,10 +1050,12 @@ function renderReport(mainIdx, compIdx) {
       <div class="r-tag"><span class="n">07</span> Разбивка</div>
       <h2>Направления, источники, тип сообщения</h2>
       <p class="r-desc">${naprTop.length ? `Больше всего обращений приходится на направление «${escapeHtml(naprTop[0].label)}»${istochnikTop.length ? `, основной канал поступления — «${escapeHtml(istochnikTop[0].label)}»` : ''}.` : ''}</p>
+      <h3>По источникам</h3>
       <div class="r-grid2">
-        <div><h3>Направления</h3>${barTableHtml(naprTop)}</div>
-        <div><h3>Источники</h3>${barTableHtml(istochnikTop)}</div>
+        <div>${sourceStatusTableHtml(mainIdx, compIdx)}</div>
+        <div>${svgPieChart(istochnikTop, 180)}</div>
       </div>
+      <h3>Направления</h3>${barTableHtml(naprTop)}
       <h3>Тип сообщения</h3>${barTableHtml(tipTop)}
     </div>
 
@@ -1085,6 +1091,69 @@ function barTableHtml(rows) {
   return `<div class="r-table-wrap"><table>
     <thead><tr><th>Значение</th><th style="width:90px">Кол-во</th><th style="width:80px">Доля</th></tr></thead>
     <tbody>${rows.map(o => `<tr><td>${escapeHtml(o.label)}</td><td class="r-num">${fmtNum(o.count)}</td><td class="r-num">${Math.round(o.count / max * 100)}%</td></tr>`).join('')}</tbody>
+  </table></div>`;
+}
+
+const PIE_COLORS = ['#4f8cff', '#38bdf8', '#22c55e', '#f5b942', '#a78bfa', '#f5455c', '#fb923c', '#94a3b8', '#2dd4bf', '#f472b6'];
+
+function svgPieChart(items, size) {
+  size = size || 200;
+  const total = items.reduce((s, o) => s + o.count, 0);
+  if (!total) return `<div class="empty-note">Нет данных</div>`;
+  const r = size / 2, cx = r, cy = r;
+  let angle = -Math.PI / 2;
+  const paths = items.map((o, i) => {
+    const frac = o.count / total;
+    const a0 = angle;
+    const a1 = angle + frac * Math.PI * 2;
+    angle = a1;
+    const x0 = cx + r * Math.cos(a0), y0 = cy + r * Math.sin(a0);
+    const x1 = cx + r * Math.cos(a1), y1 = cy + r * Math.sin(a1);
+    const large = (a1 - a0) > Math.PI ? 1 : 0;
+    const color = PIE_COLORS[i % PIE_COLORS.length];
+    if (frac >= 0.999) {
+      return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${color}"/>`;
+    }
+    return `<path d="M${cx},${cy} L${x0.toFixed(2)},${y0.toFixed(2)} A${r},${r} 0 ${large} 1 ${x1.toFixed(2)},${y1.toFixed(2)} Z" fill="${color}" stroke="#fff" stroke-width="1.5"/>`;
+  }).join('');
+  const legend = items.map((o, i) => `
+    <div class="r-pie-legend-row">
+      <span class="r-pie-swatch" style="background:${PIE_COLORS[i % PIE_COLORS.length]}"></span>
+      <span class="r-pie-label">${escapeHtml(o.label)}</span>
+      <span class="r-pie-val">${fmtNum(o.count)} · ${Math.round(o.count / total * 100)}%</span>
+    </div>`).join('');
+  return `<div class="r-pie-wrap">
+    <svg viewBox="0 0 ${size} ${size}" style="width:${size}px;height:${size}px;flex:none;">${paths}</svg>
+    <div class="r-pie-legend">${legend}</div>
+  </div>`;
+}
+
+// Источник × статус: кол-во / динамика / в работе / отработано / % отработки — как в примере ЦУР-справки
+function sourceStatusTableHtml(mainIdx, compIdx) {
+  const rows = computeDynList(mainIdx, compIdx, 'istochnik').sort((a, b) => b.mainCount - a.mainCount);
+  if (!rows.length) return `<div class="empty-note">Нет данных</div>`;
+  const col = DATA.cols.istochnik, statusCol = DATA.cols.status;
+  rows.forEach(r => {
+    let resolved = 0, total = 0;
+    for (const i of mainIdx) {
+      if (col[i] !== r.key) continue;
+      total++;
+      if (RESOLVED_STATUS_IDX.has(statusCol[i])) resolved++;
+    }
+    r.resolved = resolved;
+    r.inWork = total - resolved;
+    r.resolvedPct = total ? Math.round(resolved / total * 1000) / 10 : 0;
+  });
+  return `<div class="r-table-wrap"><table>
+    <thead><tr><th>Источник</th><th style="width:70px">Кол-во</th><th style="width:78px">Динамика</th><th style="width:70px">В работе</th><th style="width:80px">Отработано</th><th style="width:90px">% отработки</th></tr></thead>
+    <tbody>${rows.map(r => `<tr>
+      <td>${escapeHtml(r.label)}</td>
+      <td class="r-num">${fmtNum(r.mainCount)}</td>
+      <td class="r-delta ${r.delta >= 0 ? 'bad' : 'good'}">${pctText(r.pct)}</td>
+      <td class="r-num">${fmtNum(r.inWork)}</td>
+      <td class="r-num">${fmtNum(r.resolved)}</td>
+      <td class="r-num">${r.resolvedPct}%</td>
+    </tr>`).join('')}</tbody>
   </table></div>`;
 }
 
