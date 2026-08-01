@@ -1,5 +1,5 @@
-const TAB_HASHES = { 'tab-overview': 'overview', 'tab-curators': 'curators', 'tab-report': 'report' };
-const TAB_TARGETS = { overview: 'tab-overview', curators: 'tab-curators', report: 'tab-report' };
+const TAB_HASHES = { 'tab-overview': 'overview', 'tab-curators': 'curators', 'tab-report': 'report', 'tab-calendar': 'calendar' };
+const TAB_TARGETS = { overview: 'tab-overview', curators: 'tab-curators', report: 'tab-report', calendar: 'tab-calendar' };
 
 /* ================= Utilities: date <-> day index ================= */
 let DATA = null;
@@ -25,12 +25,18 @@ function fmtDateRu(iso) {
 function statusBlockHtml(idxArr) {
   const total = idxArr.length;
   if (!total) return `<div class="empty-note">Нет данных за выбранный период</div>`;
-  let resolved = 0;
-  for (const i of idxArr) if (RESOLVED_STATUS_IDX.has(DATA.cols.status[i])) resolved++;
+  let resolved = 0, overdueInWork = 0, repeatsInWork = 0, delayInWork = 0;
+  for (const i of idxArr) {
+    const isResolved = RESOLVED_STATUS_IDX.has(DATA.cols.status[i]);
+    if (isResolved) { resolved++; continue; }
+    if (DATA.cols.overdue[i] === 1) overdueInWork++;
+    if (DATA.cols.hasRepeats[i] === 1) repeatsInWork++;
+    if (DATA.cols.hasDelay[i] === 1) delayInWork++;
+  }
   const inWork = total - resolved;
   const rows = [{ label: 'Решено', count: resolved }, { label: 'В работе', count: inWork }];
   const maxCount = Math.max(resolved, inWork, 1);
-  return `<div class="toplist">` + rows.map(o => {
+  let html = `<div class="toplist">` + rows.map(o => {
     const pct = Math.round((o.count / total) * 1000) / 10;
     const barPct = Math.round((o.count / maxCount) * 100);
     return `<div class="toprow">
@@ -40,6 +46,11 @@ function statusBlockHtml(idxArr) {
       <span class="dyn" style="color:var(--text-soft);font-weight:600;font-family:var(--mono);">${pct}%</span>
     </div>`;
   }).join('') + `</div>`;
+  if (inWork > 0 && (overdueInWork || repeatsInWork || delayInWork)) {
+    const pctOf = n => inWork ? Math.round(n / inWork * 1000) / 10 : 0;
+    html += `<div class="status-subnote">Из «В работе»: просрочено — <b>${overdueInWork}</b> (${pctOf(overdueInWork)}%) · с повторами — <b>${repeatsInWork}</b> (${pctOf(repeatsInWork)}%) · с отложенными решениями — <b>${delayInWork}</b> (${pctOf(delayInWork)}%)</div>`;
+  }
+  return html;
 }
 
 /* ================= Core aggregation (validated in Node) ================= */
@@ -49,7 +60,8 @@ function buildMask(filters) {
   const c = DATA.cols;
   const dateArr = c.date, kuratorArr = c.kurator, podtemaArr = c.podtema, sintArr = c.sint,
         istochnikArr = c.istochnik, naprArr = c.napr, tipArr = c.tip, statusArr = c.status,
-        naspunktArr = c.naspunkt, rayonArr = c.rayon, ukArr = c.uk, ispolnitelArr = c.ispolnitel, spamArr = c.spam;
+        naspunktArr = c.naspunkt, rayonArr = c.rayon, ukArr = c.uk, ispolnitelArr = c.ispolnitel, spamArr = c.spam,
+        overdueArr = c.overdue, hasRepeatsArr = c.hasRepeats, hasDelayArr = c.hasDelay;
   const { dateStart, dateEnd } = filters;
   for (let i = 0; i < n; i++) {
     const d = dateArr[i];
@@ -66,6 +78,9 @@ function buildMask(filters) {
     if (filters.uk && !filters.uk.has(ukArr[i])) continue;
     if (filters.ispolnitel && !filters.ispolnitel.has(ispolnitelArr[i])) continue;
     if (filters.spam && !filters.spam.has(spamArr[i])) continue;
+    if (filters.overdue && !filters.overdue.has(overdueArr[i])) continue;
+    if (filters.hasRepeats && !filters.hasRepeats.has(hasRepeatsArr[i])) continue;
+    if (filters.hasDelay && !filters.hasDelay.has(hasDelayArr[i])) continue;
     idx.push(i);
   }
   return idx;
@@ -255,6 +270,7 @@ function buildFilterWidgets() {
     ['napr', 'Направление'], ['tip', 'Тип сообщения'], ['status', 'Статус'],
     ['naspunkt', 'Населённый пункт'], ['rayon', 'Район'], ['uk', 'Управляющая компания'],
     ['ispolnitel', 'Исполнитель'], ['spam', 'Спам'],
+    ['overdue', 'Просрочка'], ['hasRepeats', 'Есть повторы'], ['hasDelay', 'Есть отложки'],
   ];
   const primaryRow = document.getElementById('primaryFilters');
   const extraRow = document.getElementById('extraFilters');
@@ -268,7 +284,7 @@ function buildFilterWidgets() {
 
 function readFilters(excludeKurator) {
   const f = {};
-  for (const key of ['kurator', 'podtema', 'sint', 'istochnik', 'napr', 'tip', 'status', 'naspunkt', 'rayon', 'uk', 'ispolnitel', 'spam']) {
+  for (const key of ['kurator', 'podtema', 'sint', 'istochnik', 'napr', 'tip', 'status', 'naspunkt', 'rayon', 'uk', 'ispolnitel', 'spam', 'overdue', 'hasRepeats', 'hasDelay']) {
     if (excludeKurator && key === 'kurator') continue;
     f[key] = msWidgets[key].getSelected();
   }
@@ -728,6 +744,116 @@ function dynTableHtml(rows, colLabel, opts) {
   </table></div>`;
 }
 
+/* ================= Calendar (отложенные решения) ================= */
+const RU_MONTHS = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+const RU_DOW = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+const calState = { year: null, month: null, selectedDate: null };
+
+function calendarMatchIdx() {
+  if (!DATA.dicts.delayDate || !DATA.dicts.delayDate.length) return [];
+  const filters = readFilters(false);
+  const idx = buildMask({ dateStart: MIN_DAY, dateEnd: MAX_DAY, ...filters });
+  return idx.filter(i => DATA.cols.delayDate[i] !== -1);
+}
+
+function initCalendar() {
+  const today = new Date();
+  calState.year = today.getFullYear();
+  calState.month = today.getMonth();
+  document.getElementById('calPrev').addEventListener('click', () => { shiftCalMonth(-1); });
+  document.getElementById('calNext').addEventListener('click', () => { shiftCalMonth(1); });
+  document.getElementById('calToday').addEventListener('click', () => {
+    const t = new Date();
+    calState.year = t.getFullYear(); calState.month = t.getMonth();
+    calState.selectedDate = t.toISOString().slice(0, 10);
+    renderCalendar();
+  });
+}
+function shiftCalMonth(delta) {
+  calState.month += delta;
+  if (calState.month < 0) { calState.month = 11; calState.year--; }
+  if (calState.month > 11) { calState.month = 0; calState.year++; }
+  renderCalendar();
+}
+
+function renderCalendar() {
+  const grid = document.getElementById('calGrid');
+  const titleEl = document.getElementById('calTitle');
+  if (!grid || !titleEl) return;
+  const idxArr = calendarMatchIdx();
+
+  titleEl.textContent = `${RU_MONTHS[calState.month]} ${calState.year}`;
+
+  // group matching rows by ISO date string (dict-decoded)
+  const byDate = new Map(); // 'YYYY-MM-DD' -> [row indices]
+  for (const i of idxArr) {
+    const iso = DATA.dicts.delayDate[DATA.cols.delayDate[i]];
+    if (!byDate.has(iso)) byDate.set(iso, []);
+    byDate.get(iso).push(i);
+  }
+
+  const monthPrefix = `${calState.year}-${String(calState.month + 1).padStart(2, '0')}`;
+  let monthTotal = 0;
+  byDate.forEach((arr, iso) => { if (iso.startsWith(monthPrefix)) monthTotal += arr.length; });
+  document.getElementById('calTotal').textContent = `Всего в этом месяце: ${monthTotal}`;
+
+  const first = new Date(Date.UTC(calState.year, calState.month, 1));
+  const daysInMonth = new Date(Date.UTC(calState.year, calState.month + 1, 0)).getUTCDate();
+  let firstDow = first.getUTCDay(); // 0=Sun
+  firstDow = firstDow === 0 ? 6 : firstDow - 1; // Monday-first index
+
+  const todayIso = new Date().toISOString().slice(0, 10);
+
+  let html = RU_DOW.map(d => `<div class="cal-dow">${d}</div>`).join('');
+  for (let k = 0; k < firstDow; k++) html += `<div class="cal-day empty"></div>`;
+  for (let day = 1; day <= daysInMonth; day++) {
+    const iso = `${monthPrefix}-${String(day).padStart(2, '0')}`;
+    const items = byDate.get(iso) || [];
+    const isToday = iso === todayIso;
+    const isPast = iso < todayIso;
+    const isSelected = iso === calState.selectedDate;
+    html += `<div class="cal-day${isToday ? ' today' : ''}${isSelected ? ' selected' : ''}${items.length && isPast ? ' past' : ''}" data-date="${iso}">
+      <span class="dnum">${day}</span>
+      ${items.length ? `<div class="dcount">${items.length}</div>` : ''}
+    </div>`;
+  }
+  grid.innerHTML = html;
+
+  grid.querySelectorAll('.cal-day:not(.empty)').forEach(cell => {
+    cell.addEventListener('click', () => {
+      calState.selectedDate = cell.dataset.date;
+      renderCalendar();
+      renderCalDayList(cell.dataset.date, byDate.get(cell.dataset.date) || []);
+    });
+  });
+
+  if (calState.selectedDate) renderCalDayList(calState.selectedDate, byDate.get(calState.selectedDate) || []);
+}
+
+function renderCalDayList(iso, items) {
+  const panel = document.getElementById('calDayPanel');
+  const list = document.getElementById('calDayList');
+  const titleEl = document.getElementById('calDayTitle');
+  if (!panel) return;
+  panel.style.display = 'block';
+  titleEl.textContent = fmtDateRu(iso);
+  if (!items.length) { list.innerHTML = `<div class="empty-note">На этот день ничего не отложено</div>`; return; }
+  const sorted = [...items].sort((a, b) => (DATA.cols.delayCount[b] || 0) - (DATA.cols.delayCount[a] || 0));
+  list.innerHTML = sorted.map(i => {
+    const podtema = DATA.cols.podtema[i] !== -1 ? DATA.dicts.podtema[DATA.cols.podtema[i]] : '—';
+    const kurator = DATA.cols.kurator[i] !== -1 ? DATA.dicts.kurator[DATA.cols.kurator[i]] : '—';
+    const addr = DATA.cols.addr[i] !== -1 ? DATA.dicts.addr[DATA.cols.addr[i]] : '—';
+    const dc = DATA.cols.delayCount[i] || 0;
+    return `<div class="cal-day-list-row">
+      <span>
+        <span class="name" title="${escapeHtml(podtema)}">${escapeHtml(podtema)}</span>
+        <div class="meta">${escapeHtml(kurator)} · ${escapeHtml(addr)}</div>
+      </span>
+      <span class="badge-n">отложено ${dc}×</span>
+    </div>`;
+  }).join('');
+}
+
 function renderReport(mainIdx, compIdx) {
   const root = document.getElementById('reportRoot');
   if (!root || !mainIdx) return;
@@ -924,7 +1050,7 @@ function renderReport(mainIdx, compIdx) {
     <div class="r-block">
       <div class="r-tag"><span class="n">99</span> Развитие справки</div>
       <h2>Что можно добавить дальше</h2>
-      <p class="r-desc">В доработке</p>
+      <p class="r-desc">Текст обращения («Описание») сейчас не включён в данные дашборда — только категории (подтема/факт/направление). Чтобы оценивать социальную значимость и тональность обращений по самому тексту, нужно отдельно подключить анализ текста: это заметно увеличит объём данных и потребует отдельного шага обработки. Если это актуально — можно обсудить отдельно, как лучше это сделать.</p>
     </div>
 
     <div class="r-block">
@@ -998,6 +1124,7 @@ function applyAll() {
   renderOverview();
   renderCuratorTab();
   renderReport(window.__lastMainIdx, window.__lastCompIdx);
+  renderCalendar();
 }
 
 function resetFilters() {
@@ -1019,6 +1146,7 @@ function init() {
 
   buildFilterWidgets();
   buildCuratorPicker();
+  initCalendar();
   attachExpandHandler('ov-emails');
   attachExpandHandler('c-emails');
   attachExpandHandler('ov-podtemy');

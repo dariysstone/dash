@@ -36,6 +36,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
       <span>Справка</span>
     </button>
+    <button type="button" class="app-tab" data-target="tab-calendar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      <span>Календарь</span>
+    </button>
   </nav>
 
   <div class="panel">
@@ -64,6 +68,7 @@
     <div class="tab active" data-target="tab-overview">Обзор</div>
     <div class="tab" data-target="tab-curators">По кураторам</div>
     <div class="tab" data-target="tab-report">Справка</div>
+    <div class="tab" data-target="tab-calendar">Календарь отложек</div>
   </div>
 
   <!-- ===================== OVERVIEW TAB ===================== -->
@@ -148,6 +153,29 @@
   <!-- ===================== REPORT TAB ===================== -->
   <div class="tabpage" id="tab-report">
     <div id="reportRoot"></div>
+  </div>
+
+  <!-- ===================== CALENDAR TAB ===================== -->
+  <div class="tabpage" id="tab-calendar">
+    <div class="panel">
+      <div class="panel-title"><span class="ic">◐</span>Календарь отложенных решений</div>
+      <p class="empty-note" style="text-align:left;padding:0 0 12px;">
+        На какой день отложено решение — по данным файла «Отложенные». Учитывает текущие фильтры (куратор, подтема и т.д.),
+        но не ограничен основным периодом — показывает все предстоящие (и просроченные) сроки.
+      </p>
+      <div class="cal-toolbar">
+        <button type="button" class="btn ghost" id="calPrev">‹ Пред.</button>
+        <div class="cal-title" id="calTitle"></div>
+        <button type="button" class="btn ghost" id="calNext">След. ›</button>
+        <button type="button" class="btn" id="calToday">Сегодня</button>
+        <span class="cal-total" id="calTotal"></span>
+      </div>
+      <div class="cal-grid" id="calGrid"></div>
+    </div>
+    <div class="card" id="calDayPanel" style="display:none;">
+      <h3>Задачи на <span class="n" id="calDayTitle"></span></h3>
+      <div id="calDayList"></div>
+    </div>
   </div>
 
 </div>
