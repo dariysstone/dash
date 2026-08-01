@@ -732,7 +732,7 @@ function dynTableHtml(rows, colLabel, opts) {
   opts = opts || {};
   if (!rows.length) return `<div class="empty-note">Нет данных</div>`;
   return `<div class="r-table-wrap"><table>
-    <thead><tr><th style="width:34px">№</th><th>${escapeHtml(colLabel)}</th><th style="width:110px">Сравнение</th><th style="width:110px">Основной</th><th style="width:100px">Динамика</th></tr></thead>
+    <thead><tr><th style="width:28px">№</th><th>${escapeHtml(colLabel)}</th><th style="width:80px">Сравн.</th><th style="width:80px">Осн.</th><th style="width:78px">Динамика</th></tr></thead>
     <tbody>${rows.map((r, i) => `
       <tr class="${reportRowClass(r.pct)}">
         <td class="r-rank">${String(i + 1).padStart(2, '0')}</td>
@@ -844,9 +844,15 @@ function renderCalDayList(iso, items) {
     const kurator = DATA.cols.kurator[i] !== -1 ? DATA.dicts.kurator[DATA.cols.kurator[i]] : '—';
     const addr = DATA.cols.addr[i] !== -1 ? DATA.dicts.addr[DATA.cols.addr[i]] : '—';
     const dc = DATA.cols.delayCount[i] || 0;
+    const ecur = DATA.cols.ecur[i];
+    const numsrc = DATA.cols.numsrc[i];
+    const nums = [
+      ecur ? `<span class="task-num">ЕЦУР № ${escapeHtml(ecur)}</span>` : '',
+      numsrc ? `<span class="task-num task-num-src">в источнике № ${escapeHtml(numsrc)}</span>` : '',
+    ].filter(Boolean).join(' ');
     return `<div class="cal-day-list-row">
       <span>
-        <span class="name" title="${escapeHtml(podtema)}">${escapeHtml(podtema)}</span>
+        <span class="name">${nums ? `${nums}<br>` : ''}${escapeHtml(podtema)}</span>
         <div class="meta">${escapeHtml(kurator)} · ${escapeHtml(addr)}</div>
       </span>
       <span class="badge-n">отложено ${dc}×</span>
