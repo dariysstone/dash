@@ -1257,20 +1257,110 @@ function pptxBulletXml(text, opts) {
     : `<a:rPr lang="ru-RU" sz="${sz}"${bold} dirty="0"/>`;
   return `<a:p><a:pPr${indentAttr}>${spcAttr}${bullet}</a:pPr><a:r>${rPr}<a:t>${pxmlEscape(text)}</a:t></a:r></a:p>`;
 }
-function pptxSlideXml(title, bodyParagraphsXml, footerText) {
+function pptxSlideBase(title, contentXml, footerText) {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:bg><p:bgPr><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill><a:effectLst/></p:bgPr></p:bg><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/><p:sp><p:nvSpPr><p:cNvPr id="9" name="HeaderBand"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="12192000" cy="1028700"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="06223F"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:endParaRPr lang="ru-RU"/></a:p></p:txBody></p:sp><p:sp><p:nvSpPr><p:cNvPr id="8" name="AccentRule"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="0" y="1028700"/><a:ext cx="12192000" cy="38100"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="38BDF8"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:endParaRPr lang="ru-RU"/></a:p></p:txBody></p:sp><p:sp><p:nvSpPr><p:cNvPr id="2" name="Title"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="457200" y="257175"/><a:ext cx="11277600" cy="600075"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr><p:txBody><a:bodyPr anchor="ctr"/><a:lstStyle/><a:p><a:r><a:rPr lang="ru-RU" sz="2600" b="1" dirty="0"><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill></a:rPr><a:t>${pxmlEscape(title)}</a:t></a:r></a:p></p:txBody></p:sp><p:sp><p:nvSpPr><p:cNvPr id="3" name="Body"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="457200" y="1257300"/><a:ext cx="11277600" cy="5257800"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr><p:txBody><a:bodyPr><a:normAutofit fontScale="85000" lnSpcReduction="10000"/></a:bodyPr><a:lstStyle/>${bodyParagraphsXml}</p:txBody></p:sp><p:sp><p:nvSpPr><p:cNvPr id="7" name="Footer"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="457200" y="6629400"/><a:ext cx="11277600" cy="182880"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="ru-RU" sz="900" dirty="0"><a:solidFill><a:srgbClr val="94A3B8"/></a:solidFill></a:rPr><a:t>${pxmlEscape(footerText || '')}</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld><p:clrMapOvr><a:overrideClrMapping bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/></p:clrMapOvr></p:sld>`;
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:bg><p:bgPr><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill><a:effectLst/></p:bgPr></p:bg><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/><p:sp><p:nvSpPr><p:cNvPr id="9" name="HeaderBand"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="12192000" cy="1028700"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="06223F"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:endParaRPr lang="ru-RU"/></a:p></p:txBody></p:sp><p:sp><p:nvSpPr><p:cNvPr id="8" name="AccentRule"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="0" y="1028700"/><a:ext cx="12192000" cy="38100"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="38BDF8"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:endParaRPr lang="ru-RU"/></a:p></p:txBody></p:sp><p:sp><p:nvSpPr><p:cNvPr id="2" name="Title"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="457200" y="257175"/><a:ext cx="11277600" cy="600075"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr><p:txBody><a:bodyPr anchor="ctr"/><a:lstStyle/><a:p><a:r><a:rPr lang="ru-RU" sz="2600" b="1" dirty="0"><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill></a:rPr><a:t>${pxmlEscape(title)}</a:t></a:r></a:p></p:txBody></p:sp>${contentXml}<p:sp><p:nvSpPr><p:cNvPr id="7" name="Footer"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="457200" y="6629400"/><a:ext cx="11277600" cy="182880"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="ru-RU" sz="900" dirty="0"><a:solidFill><a:srgbClr val="94A3B8"/></a:solidFill></a:rPr><a:t>${pxmlEscape(footerText || '')}</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld><p:clrMapOvr><a:overrideClrMapping bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/></p:clrMapOvr></p:sld>`;
 }
 
-function pptxRankLines(rows, opts) {
-  opts = opts || {};
-  return rows.map((r, i) => {
-    const main = `${String(i + 1).padStart(2, '0')}. ${r.label} — ${fmtNum(r.main != null ? r.main : r.count)}${r.comp != null ? ` (было ${fmtNum(r.comp)}, ${pctText(r.pct)})` : ''}`;
-    let out = pptxBulletXml(main, { sz: 1300 });
-    if (r.mode) out += pptxBulletXml(`Чаще всего жалуются: «${r.mode}»`, { sz: 1050, noBullet: true, color: '5C7AA3' });
-    if (r.kw) out += pptxBulletXml(`Частые слова: ${r.kw}`, { sz: 1050, noBullet: true, color: '1456A8' });
-    return out;
+function pptxSlideXml(title, bodyParagraphsXml, footerText) {
+  const bodySp = `<p:sp><p:nvSpPr><p:cNvPr id="3" name="Body"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="457200" y="1257300"/><a:ext cx="11277600" cy="5257800"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr><p:txBody><a:bodyPr><a:normAutofit fontScale="85000" lnSpcReduction="10000"/></a:bodyPr><a:lstStyle/>${bodyParagraphsXml}</p:txBody></p:sp>`;
+  return pptxSlideBase(title, bodySp, footerText);
+}
+
+/* ---- table cell/row helpers (used by pptxTableGraphicFrame) ---- */
+function pptxCellLines(lines) {
+  return lines.map(line => {
+    const runs = (Array.isArray(line) ? line : [line]).map(r => {
+      const boldAttr = r.bold ? ' b="1"' : '';
+      const italicAttr = r.italic ? ' i="1"' : '';
+      const colorXml = r.color ? `<a:solidFill><a:srgbClr val="${r.color}"/></a:solidFill>` : '';
+      return `<a:r><a:rPr lang="ru-RU" sz="${r.size || 1100}"${boldAttr}${italicAttr} dirty="0">${colorXml}</a:rPr><a:t>${pxmlEscape(r.text)}</a:t></a:r>`;
+    }).join('');
+    return `<a:p>${runs}</a:p>`;
   }).join('');
+}
+function pptxTableGraphicFrame(id, x, y, cx, colWidths, rows) {
+  const gridCols = colWidths.map(w => `<a:gridCol w="${w}"/>`).join('');
+  const trXml = rows.map(row => {
+    const tcXml = row.cells.map(cell => {
+      const paras = pptxCellLines(cell.lines);
+      const fillXml = cell.fill ? `<a:solidFill><a:srgbClr val="${cell.fill}"/></a:solidFill>` : '<a:noFill/>';
+      const anchor = cell.anchor || 'ctr';
+      const alignAttr = cell.align ? ` algn="${cell.align}"` : '';
+      return `<a:tc><a:txBody><a:bodyPr wrap="square" anchor="${anchor}" lIns="54864" tIns="32004" rIns="54864" bIns="32004"/><a:lstStyle/>${paras.replace(/<a:p>/g, `<a:p><a:pPr${alignAttr}/>`)}</a:txBody><a:tcPr>${fillXml}</a:tcPr></a:tc>`;
+    }).join('');
+    return `<a:tr h="${row.h || 400000}">${tcXml}</a:tr>`;
+  }).join('');
+  const cy = rows.reduce((s, r) => s + (r.h || 400000), 0);
+  return `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}" name="Table${id}"/><p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/></p:cNvGraphicFramePr><p:nvPr/></p:nvGraphicFramePr><p:xfrm><a:off x="${x}" y="${y}"/><a:ext cx="${cx}" cy="${cy}"/></p:xfrm><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table"><a:tbl><a:tblPr firstRow="0" bandRow="0"/><a:tblGrid>${gridCols}</a:tblGrid>${trXml}</a:tbl></a:graphicData></a:graphic></p:graphicFrame>`;
+}
+
+const PPTX_NAVY = '06223F', PPTX_BAD = 'B91C1C', PPTX_GOOD = '15803D', PPTX_BAD_BG = 'FEF2F4', PPTX_GOOD_BG = 'F0FDF4', PPTX_ALT_BG = 'F5F9FF', PPTX_SUBTLE = '5C7AA3';
+
+// Ranking table matching the report's Подтема/Факт/Куратор/Адрес tables: № | Label (+sub-lines) | Сравнение | Основной | Динамика
+function pptxRankTableXml(id, rows, colLabel) {
+  const x = 457200, y = 1257300, cx = 11277600;
+  const w = [Math.round(cx * 0.05), Math.round(cx * 0.51), Math.round(cx * 0.14), Math.round(cx * 0.14)];
+  w.push(cx - w.reduce((a, b) => a + b, 0));
+  const header = { h: 340000, cells: [
+    { lines: [[{ text: '№', size: 1000, bold: true, color: 'FFFFFF' }]], fill: PPTX_NAVY, align: 'ctr' },
+    { lines: [[{ text: colLabel, size: 1000, bold: true, color: 'FFFFFF' }]], fill: PPTX_NAVY },
+    { lines: [[{ text: 'Сравнение', size: 1000, bold: true, color: 'FFFFFF' }]], fill: PPTX_NAVY, align: 'ctr' },
+    { lines: [[{ text: 'Основной', size: 1000, bold: true, color: 'FFFFFF' }]], fill: PPTX_NAVY, align: 'ctr' },
+    { lines: [[{ text: 'Динамика', size: 1000, bold: true, color: 'FFFFFF' }]], fill: PPTX_NAVY, align: 'ctr' },
+  ] };
+  const dataRows = rows.map((r, i) => {
+    const isCrit = r.pct >= 30, isGood = r.pct <= -20;
+    const fill = isCrit ? PPTX_BAD_BG : (isGood ? PPTX_GOOD_BG : (i % 2 ? PPTX_ALT_BG : 'FFFFFF'));
+    const labelLines = [[{ text: r.label, size: 1100 }]];
+    if (r.mode) labelLines.push([{ text: `Чаще всего жалуются: «${r.mode}»`, size: 850, italic: true, color: PPTX_SUBTLE }]);
+    if (r.kw) labelLines.push([{ text: `Частые слова: ${r.kw}`, size: 850, italic: true, color: '1456A8' }]);
+    return { h: 340000 + (r.mode ? 220000 : 0) + (r.kw ? 220000 : 0), cells: [
+      { lines: [[{ text: String(i + 1).padStart(2, '0'), size: 1050 }]], fill, align: 'ctr' },
+      { lines: labelLines, fill, anchor: 't' },
+      { lines: [[{ text: fmtNum(r.comp), size: 1050 }]], fill, align: 'ctr' },
+      { lines: [[{ text: fmtNum(r.main), size: 1050, bold: true }]], fill, align: 'ctr' },
+      { lines: [[{ text: pctText(r.pct), size: 1050, bold: true, color: r.delta >= 0 ? PPTX_BAD : PPTX_GOOD }]], fill, align: 'ctr' },
+    ] };
+  });
+  return pptxTableGraphicFrame(id, x, y, cx, w, [header, ...dataRows]);
+}
+
+// Simple two-column value/count table (Направления, Источники, ...)
+function pptxSimpleTableXml(id, x, y, cx, rows, headerLabel) {
+  const w = [Math.round(cx * 0.72), cx - Math.round(cx * 0.72)];
+  const header = { h: 320000, cells: [
+    { lines: [[{ text: headerLabel, size: 1000, bold: true, color: 'FFFFFF' }]], fill: PPTX_NAVY },
+    { lines: [[{ text: 'Кол-во', size: 1000, bold: true, color: 'FFFFFF' }]], fill: PPTX_NAVY, align: 'ctr' },
+  ] };
+  const dataRows = rows.map((r, i) => ({ h: 300000, cells: [
+    { lines: [[{ text: r.label, size: 1050 }]], fill: i % 2 ? PPTX_ALT_BG : 'FFFFFF' },
+    { lines: [[{ text: fmtNum(r.count), size: 1050, bold: true }]], fill: i % 2 ? PPTX_ALT_BG : 'FFFFFF', align: 'ctr' },
+  ] }));
+  return pptxTableGraphicFrame(id, x, y, cx, w, [header, ...dataRows]);
+}
+
+// Requester table: Email | Кол-во, with mode/keyword sub-lines under the email
+function pptxEmailTableXml(id, rows) {
+  const x = 457200, y = 1257300, cx = 11277600;
+  const w = [Math.round(cx * 0.08), Math.round(cx * 0.72), cx - Math.round(cx * 0.08) - Math.round(cx * 0.72)];
+  const header = { h: 320000, cells: [
+    { lines: [[{ text: '№', size: 1000, bold: true, color: 'FFFFFF' }]], fill: PPTX_NAVY, align: 'ctr' },
+    { lines: [[{ text: 'Заявитель', size: 1000, bold: true, color: 'FFFFFF' }]], fill: PPTX_NAVY },
+    { lines: [[{ text: 'Кол-во', size: 1000, bold: true, color: 'FFFFFF' }]], fill: PPTX_NAVY, align: 'ctr' },
+  ] };
+  const dataRows = rows.map((r, i) => {
+    const lines = [[{ text: r.label, size: 1100 }]];
+    if (r.mode) lines.push([{ text: `Чаще всего жалуется: «${r.mode}»`, size: 850, italic: true, color: PPTX_SUBTLE }]);
+    if (r.kw) lines.push([{ text: `Частые слова: ${r.kw}`, size: 850, italic: true, color: '1456A8' }]);
+    const fill = i % 2 ? PPTX_ALT_BG : 'FFFFFF';
+    return { h: 340000 + (r.mode ? 220000 : 0) + (r.kw ? 220000 : 0), cells: [
+      { lines: [[{ text: String(i + 1).padStart(2, '0'), size: 1050 }]], fill, align: 'ctr' },
+      { lines, fill, anchor: 't' },
+      { lines: [[{ text: fmtNum(r.count), size: 1050, bold: true }]], fill, align: 'ctr' },
+    ] };
+  });
+  return pptxTableGraphicFrame(id, x, y, cx, w, [header, ...dataRows]);
 }
 
 function buildReportSlides(m) {
@@ -1288,21 +1378,23 @@ function buildReportSlides(m) {
   });
   // 2. takeaways
   slides.push({ title: 'Ключевые выводы', body: m.takeaways.map(t => pptxBulletXml(t, { sz: 1300 })).join('') });
-  // 3. growth
-  if (m.growthPodtema.length) slides.push({ title: 'Подтемы — наибольший прирост', body: pptxRankLines(m.growthPodtema) });
-  if (m.declinePodtema.length) slides.push({ title: 'Подтемы — наибольшее снижение', body: pptxRankLines(m.declinePodtema) });
-  if (m.factsTop.length) slides.push({ title: 'Топ фактов', body: pptxRankLines(m.factsTop) });
-  if (m.isOverall && m.kuratorDyn.length) slides.push({ title: 'Рейтинг кураторов по объёму', body: pptxRankLines(m.kuratorDyn) });
-  if (m.addrDyn.length) slides.push({ title: 'Адреса — по объёму', body: pptxRankLines(m.addrDyn) });
-  if (m.addrGrowth.length) slides.push({ title: 'Адреса — резкий прирост', body: pptxRankLines(m.addrGrowth) });
-  if (m.topEmails.length) slides.push({ title: 'Активные заявители', body: pptxRankLines(m.topEmails) });
-  const razbBody = [
-    pptxBulletXml('Направления', { bold: true, sz: 1300 }),
-    ...m.naprTop.map(r => pptxBulletXml(`${r.label} — ${fmtNum(r.count)}`, { sz: 1150 })),
-    pptxBulletXml('Источники', { bold: true, sz: 1300, spaceBefore: 1200 }),
-    ...m.istochnikTop.map(r => pptxBulletXml(`${r.label} — ${fmtNum(r.count)}`, { sz: 1150 })),
-  ].join('');
-  slides.push({ title: 'Направления и источники', body: razbBody });
+  // 3+. ranking tables
+  if (m.growthPodtema.length) slides.push({ title: 'Подтемы — наибольший прирост', table: (id) => pptxRankTableXml(id, m.growthPodtema, 'Подтема') });
+  if (m.declinePodtema.length) slides.push({ title: 'Подтемы — наибольшее снижение', table: (id) => pptxRankTableXml(id, m.declinePodtema, 'Подтема') });
+  if (m.factsTop.length) slides.push({ title: 'Топ фактов', table: (id) => pptxRankTableXml(id, m.factsTop, 'Факт') });
+  if (m.isOverall && m.kuratorDyn.length) slides.push({ title: 'Рейтинг кураторов по объёму', table: (id) => pptxRankTableXml(id, m.kuratorDyn, 'Куратор') });
+  if (m.addrDyn.length) slides.push({ title: 'Адреса — по объёму', table: (id) => pptxRankTableXml(id, m.addrDyn, 'Адрес') });
+  if (m.addrGrowth.length) slides.push({ title: 'Адреса — резкий прирост', table: (id) => pptxRankTableXml(id, m.addrGrowth, 'Адрес') });
+  if (m.topEmails.length) slides.push({ title: 'Активные заявители', table: (id) => pptxEmailTableXml(id, m.topEmails) });
+  if (m.naprTop.length || m.istochnikTop.length) {
+    slides.push({
+      title: 'Направления и источники',
+      table: (id) => [
+        m.naprTop.length ? pptxSimpleTableXml(id, 457200, 1257300, 5400000, m.naprTop, 'Направление') : '',
+        m.istochnikTop.length ? pptxSimpleTableXml(id + 1, 6320000, 1257300, 5400000, m.istochnikTop, 'Источник') : '',
+      ].join(''),
+    });
+  }
   // final: итог
   const itogBody = [
     pptxBulletXml(`Обращения ${m.dynDelta >= 0 ? 'выросли' : 'снизились'} с ${fmtNum(m.totalComp)} до ${fmtNum(m.total)} (${pctText(m.dynPct)})`, { bold: true, sz: 1400 }),
@@ -1367,7 +1459,11 @@ async function exportReportPptx(model) {
   zip.file('ppt/slideLayouts/_rels/slideLayout1.xml.rels', PPTX_SLIDE_LAYOUT_RELS);
   zip.file('ppt/theme/theme1.xml', PPTX_THEME);
   slides.forEach((s, i) => {
-    zip.file(`ppt/slides/slide${i + 1}.xml`, pptxSlideXml(s.title, s.body, `${model.omsu} · ${i + 1} / ${slides.length}`));
+    const footerText = `${model.omsu} · ${i + 1} / ${slides.length}`;
+    const xml = s.table
+      ? pptxSlideBase(s.title, s.table(100 + i * 10), footerText)
+      : pptxSlideXml(s.title, s.body, footerText);
+    zip.file(`ppt/slides/slide${i + 1}.xml`, xml);
     zip.file(`ppt/slides/_rels/slide${i + 1}.xml.rels`, PPTX_SLIDE_RELS);
   });
   const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' });
