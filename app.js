@@ -125,8 +125,10 @@ function topWithMode(idxArr, colName, colName2, topN, opts) {
   const dict2 = DATA.dicts[colName2];
   for (const item of top) {
     const modeCounts = new Map();
+    const matchIdx = [];
     for (const i of idxArr) {
       if (col[i] !== item.key) continue;
+      matchIdx.push(i);
       const v2 = col2[i];
       modeCounts.set(v2, (modeCounts.get(v2) || 0) + 1);
     }
@@ -134,6 +136,7 @@ function topWithMode(idxArr, colName, colName2, topN, opts) {
     for (const [k, c] of modeCounts.entries()) { if (c > bestC) { bestC = c; bestK = k; } }
     item.modeLabel = (bestK === -1 || bestK === null) ? '—' : dict2[bestK];
     item.modeCount = bestC < 0 ? 0 : bestC;
+    item.keywordPhrase = keywordPhraseFor(matchIdx);
   }
   return top;
 }
@@ -704,20 +707,39 @@ function growthBadgeHtml(pct) {
 function declineBadgeHtml(pct) { return pct <= -30 ? '<span class="r-badge good">СНИЖЕНИЕ</span>' : ''; }
 
 // Attaches "what residents mostly complained about" to each ranking row (e.g. dominant podtema per address/curator).
+// Frequency-ranked keywords (from the Описание text, PII stripped at build time) among a set of rows.
+// Not text summarization — just word-frequency counting. See report footnote for details.
+function keywordPhraseFor(idxArr, topN) {
+  if (!DATA.dicts.keyword || !DATA.cols.keywords) return '';
+  const kwCounts = new Map();
+  for (const i of idxArr) {
+    const kwStr = DATA.cols.keywords[i];
+    if (!kwStr) continue;
+    for (const idStr of kwStr.split(',')) {
+      if (!idStr) continue;
+      const id = Number(idStr);
+      kwCounts.set(id, (kwCounts.get(id) || 0) + 1);
+    }
+  }
+  return [...kwCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, topN || 4).map(([id]) => DATA.dicts.keyword[id]).join(', ');
+}
 function attachMode(rows, idxArr, colName, modeCol) {
   const col = DATA.cols[colName];
   const col2 = DATA.cols[modeCol];
   const dict2 = DATA.dicts[modeCol];
   rows.forEach(r => {
     const modeCounts = new Map();
+    const matchIdx = [];
     for (const i of idxArr) {
       if (col[i] !== r.key) continue;
+      matchIdx.push(i);
       const v2 = col2[i];
       modeCounts.set(v2, (modeCounts.get(v2) || 0) + 1);
     }
     let bestK = null, bestC = -1;
     for (const [k, c] of modeCounts.entries()) { if (c > bestC) { bestC = c; bestK = k; } }
     r.modeLabel = (bestK == null || bestK === -1) ? null : dict2[bestK];
+    r.keywordPhrase = keywordPhraseFor(matchIdx);
   });
   return rows;
 }
@@ -736,7 +758,7 @@ function dynTableHtml(rows, colLabel, opts) {
     <tbody>${rows.map((r, i) => `
       <tr class="${reportRowClass(r.pct)}">
         <td class="r-rank">${String(i + 1).padStart(2, '0')}</td>
-        <td>${escapeHtml(r.label)}${r.delta >= 0 ? growthBadgeHtml(r.pct) : declineBadgeHtml(r.pct)}${r.modeLabel ? `<div class="r-sub">${escapeHtml(opts.modeLabel || 'Чаще всего жалуются')}: «${escapeHtml(r.modeLabel)}»</div>` : ''}</td>
+        <td>${escapeHtml(r.label)}${r.delta >= 0 ? growthBadgeHtml(r.pct) : declineBadgeHtml(r.pct)}${r.modeLabel ? `<div class="r-sub">${escapeHtml(opts.modeLabel || 'Чаще всего жалуются')}: «${escapeHtml(r.modeLabel)}»</div>` : ''}${r.keywordPhrase ? `<div class="r-sub r-sub-kw">Частые слова в обращениях: ${escapeHtml(r.keywordPhrase)}</div>` : ''}</td>
         <td class="r-num">${fmtNum(r.compCount)}</td>
         <td class="r-num">${fmtNum(r.mainCount)}</td>
         <td class="r-delta ${r.delta >= 0 ? 'bad' : 'good'}">${pctText(r.pct)}</td>
@@ -962,13 +984,13 @@ function renderReport(mainIdx, compIdx) {
     omsu: DATA.omsu, titleMain, scopeTitle, periodTxt, compTxt,
     total, totalComp, dynPct: dyn.pct, dynDelta: dyn.delta, resolvedPct,
     takeaways: takeaways.map(stripHtml),
-    growthPodtema: growthPodtema.map(r => ({ label: r.label, main: r.mainCount, comp: r.compCount, pct: r.pct, mode: r.modeLabel })),
-    declinePodtema: declinePodtema.map(r => ({ label: r.label, main: r.mainCount, comp: r.compCount, pct: r.pct, mode: r.modeLabel })),
-    factsTop: factsTop.map(r => ({ label: r.label, main: r.mainCount, comp: r.compCount, pct: r.pct, mode: r.modeLabel })),
-    kuratorDyn: kuratorDyn.map(r => ({ label: r.label, main: r.mainCount, comp: r.compCount, pct: r.pct, mode: r.modeLabel })),
-    addrDyn: addrDyn.map(r => ({ label: r.label, main: r.mainCount, comp: r.compCount, pct: r.pct, mode: r.modeLabel })),
-    addrGrowth: addrGrowth.map(r => ({ label: r.label, main: r.mainCount, comp: r.compCount, pct: r.pct, mode: r.modeLabel })),
-    topEmails: topEmails.map(r => ({ label: r.label, count: r.count, mode: r.modeLabel })),
+    growthPodtema: growthPodtema.map(r => ({ label: r.label, main: r.mainCount, comp: r.compCount, pct: r.pct, mode: r.modeLabel, kw: r.keywordPhrase })),
+    declinePodtema: declinePodtema.map(r => ({ label: r.label, main: r.mainCount, comp: r.compCount, pct: r.pct, mode: r.modeLabel, kw: r.keywordPhrase })),
+    factsTop: factsTop.map(r => ({ label: r.label, main: r.mainCount, comp: r.compCount, pct: r.pct, mode: r.modeLabel, kw: r.keywordPhrase })),
+    kuratorDyn: kuratorDyn.map(r => ({ label: r.label, main: r.mainCount, comp: r.compCount, pct: r.pct, mode: r.modeLabel, kw: r.keywordPhrase })),
+    addrDyn: addrDyn.map(r => ({ label: r.label, main: r.mainCount, comp: r.compCount, pct: r.pct, mode: r.modeLabel, kw: r.keywordPhrase })),
+    addrGrowth: addrGrowth.map(r => ({ label: r.label, main: r.mainCount, comp: r.compCount, pct: r.pct, mode: r.modeLabel, kw: r.keywordPhrase })),
+    topEmails: topEmails.map(r => ({ label: r.label, count: r.count, mode: r.modeLabel, kw: r.keywordPhrase })),
     naprTop: naprTop.map(r => ({ label: r.label, count: r.count })),
     istochnikTop: istochnikTop.map(r => ({ label: r.label, count: r.count })),
     tipTop: tipTop.map(r => ({ label: r.label, count: r.count })),
@@ -988,7 +1010,7 @@ function renderReport(mainIdx, compIdx) {
       <div>
         <div class="r-meta">Дашборд обращений граждан · Аналитическая справка · ${new Date().toLocaleDateString('ru-RU')}</div>
         <h1>${escapeHtml(DATA.omsu)} <span>· ${escapeHtml(titleMain)}</span></h1>
-        <div class="r-sub">Анализ обращений за период ${periodTxt} в сравнении с ${compTxt}. Срез: ${escapeHtml(scopeTitle)}.</div>
+        <div class="r-header-sub">Анализ обращений за период ${periodTxt} в сравнении с ${compTxt}. Срез: ${escapeHtml(scopeTitle)}.</div>
       </div>
       <div class="r-header-stats">
         <div><div class="r-hstat-label">Всего обращений</div><div class="r-hstat-value">${fmtNum(total)}</div></div>
@@ -1087,7 +1109,7 @@ function renderReport(mainIdx, compIdx) {
       <div class="r-cards-grid">
         <div class="r-info-card">
           <div class="r-info-card-meta">Топ-10 заявителей · ${escapeHtml(scopeTitle)}</div>
-          ${topEmails.map((e, i) => `<div class="r-info-row"><span class="r-info-rank">${String(i + 1).padStart(2, '0')}</span><span class="r-info-text"><span class="r-info-email" title="${escapeHtml(e.label)}">${escapeHtml(e.label)}</span>${e.modeLabel ? `<div class="r-sub">Чаще всего жалуется: «${escapeHtml(e.modeLabel)}»</div>` : ''}</span><span class="r-info-count">${e.count}</span></div>`).join('') || '<div class="empty-note">Нет данных</div>'}
+          ${topEmails.map((e, i) => `<div class="r-info-row"><span class="r-info-rank">${String(i + 1).padStart(2, '0')}</span><span class="r-info-text"><span class="r-info-email" title="${escapeHtml(e.label)}">${escapeHtml(e.label)}</span>${e.modeLabel ? `<div class="r-sub">Чаще всего жалуется: «${escapeHtml(e.modeLabel)}»</div>` : ''}${e.keywordPhrase ? `<div class="r-sub r-sub-kw">Частые слова: ${escapeHtml(e.keywordPhrase)}</div>` : ''}</span><span class="r-info-count">${e.count}</span></div>`).join('') || '<div class="empty-note">Нет данных</div>'}
         </div>
       </div>
       ${blockConclusion(emailConclusion)}
@@ -1108,9 +1130,9 @@ function renderReport(mainIdx, compIdx) {
     </div>
 
     <div class="r-block">
-      <div class="r-tag"><span class="n">99</span> О формулировках «Чаще всего жалуются»</div>
+      <div class="r-tag"><span class="n">99</span> Как считаются «частые слова» и «жалуются на»</div>
       <h2>Как это считается</h2>
-      <p class="r-desc">Текст самого обращения («Описание») в данные дашборда не включён — только категории, которые уже проставлены в ЕЦУР (подтема/факт/направление). Формулировки «чаще всего жалуются: «...»» в этой справке — это самый частый факт (конкретная закодированная жалоба, а не голая категория) для соответствующей строки, а не результат анализа свободного текста. Полноценный анализ текста обращений — отдельная задача: потребует включить «Описание» в данные (заметно увеличит объём) и подключить обработку текста.</p>
+      <p class="r-desc">Формулировки «чаще всего жалуются: «...»» — это самый частый факт (конкретная закодированная жалоба из ЕЦУР) для соответствующей строки. «Частые слова в обращениях» — это уже частотный анализ текста самого обращения («Описание»): из текста убраны служебные строки (номер заявки, координаты, повтор адреса) и персональные данные (ФИО заявителя — как из отдельной строки авторизации, так и из типовых самоопределений вида «Я, Фамилия Имя Отчество» — вырезаются вместе с отчествами и распространёнными именами до подсчёта слов), из оставшегося текста считаются самые частые значимые слова. Это подсчёт частоты слов, а не смысловой анализ или определение тональности — предложения вида «жаловались на плохую уборку мусора» дашборд не формулирует, а показывает набор частых слов (например: «мусор, уборка, контейнер»).</p>
     </div>
 
     <div class="r-block">
@@ -1249,6 +1271,7 @@ function pptxRankLines(rows, opts) {
     const main = `${String(i + 1).padStart(2, '0')}. ${r.label} — ${fmtNum(r.main != null ? r.main : r.count)}${r.comp != null ? ` (было ${fmtNum(r.comp)}, ${pctText(r.pct)})` : ''}`;
     let out = pptxBulletXml(main, { sz: 1300 });
     if (r.mode) out += pptxBulletXml(`Чаще всего жалуются: «${r.mode}»`, { sz: 1050, noBullet: true, color: '5C7AA3' });
+    if (r.kw) out += pptxBulletXml(`Частые слова: ${r.kw}`, { sz: 1050, noBullet: true, color: '1456A8' });
     return out;
   }).join('');
 }
