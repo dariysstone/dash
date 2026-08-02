@@ -736,7 +736,7 @@ function dynTableHtml(rows, colLabel, opts) {
     <tbody>${rows.map((r, i) => `
       <tr class="${reportRowClass(r.pct)}">
         <td class="r-rank">${String(i + 1).padStart(2, '0')}</td>
-        <td>${escapeHtml(r.label)}${r.delta >= 0 ? growthBadgeHtml(r.pct) : declineBadgeHtml(r.pct)}${r.modeLabel ? `<div class="r-sub">${escapeHtml(opts.modeLabel || 'Чаще всего')}: ${escapeHtml(r.modeLabel)}</div>` : ''}</td>
+        <td>${escapeHtml(r.label)}${r.delta >= 0 ? growthBadgeHtml(r.pct) : declineBadgeHtml(r.pct)}${r.modeLabel ? `<div class="r-sub">${escapeHtml(opts.modeLabel || 'Чаще всего жалуются')}: «${escapeHtml(r.modeLabel)}»</div>` : ''}</td>
         <td class="r-num">${fmtNum(r.compCount)}</td>
         <td class="r-num">${fmtNum(r.mainCount)}</td>
         <td class="r-delta ${r.delta >= 0 ? 'bad' : 'good'}">${pctText(r.pct)}</td>
@@ -889,15 +889,15 @@ function renderReport(mainIdx, compIdx) {
 
   // ---- rankings ----
   const podtemaDyn = computeDynList(mainIdx, compIdx, 'podtema');
-  const growthPodtema = attachMode(podtemaDyn.filter(r => r.delta > 0 && r.mainCount >= 5).sort((a, b) => b.pct - a.pct).slice(0, 6), mainIdx, 'podtema', 'fact');
-  const declinePodtema = attachMode(podtemaDyn.filter(r => r.delta < 0 && r.compCount >= 5).sort((a, b) => a.pct - b.pct).slice(0, 6), mainIdx, 'podtema', 'fact');
+  const growthPodtema = attachMode(podtemaDyn.filter(r => r.delta > 0 && r.mainCount >= 5).sort((a, b) => b.mainCount - a.mainCount).slice(0, 6), mainIdx, 'podtema', 'fact');
+  const declinePodtema = attachMode(podtemaDyn.filter(r => r.delta < 0 && r.compCount >= 5).sort((a, b) => b.mainCount - a.mainCount).slice(0, 6), mainIdx, 'podtema', 'fact');
 
-  const kuratorDyn = isOverall ? attachMode(computeDynList(mainIdx, compIdx, 'kurator').sort((a, b) => b.mainCount - a.mainCount).slice(0, 8), mainIdx, 'kurator', 'podtema') : [];
+  const kuratorDyn = isOverall ? attachMode(computeDynList(mainIdx, compIdx, 'kurator').sort((a, b) => b.mainCount - a.mainCount).slice(0, 8), mainIdx, 'kurator', 'fact') : [];
 
-  const addrDyn = attachMode(computeDynList(mainAddr, compAddr, 'addr').sort((a, b) => b.mainCount - a.mainCount).slice(0, 8), mainAddr, 'addr', 'podtema');
-  const addrGrowth = attachMode(computeDynList(mainAddr, compAddr, 'addr').filter(r => r.delta > 0 && r.mainCount >= 5).sort((a, b) => b.pct - a.pct).slice(0, 4), mainAddr, 'addr', 'podtema');
+  const addrDyn = attachMode(computeDynList(mainAddr, compAddr, 'addr').sort((a, b) => b.mainCount - a.mainCount).slice(0, 8), mainAddr, 'addr', 'fact');
+  const addrGrowth = attachMode(computeDynList(mainAddr, compAddr, 'addr').filter(r => r.delta > 0 && r.mainCount >= 5).sort((a, b) => b.mainCount - a.mainCount).slice(0, 4), mainAddr, 'addr', 'fact');
 
-  const topEmails = topWithMode(mainIdx, 'email', 'podtema', 10, { excludeNull: true });
+  const topEmails = topWithMode(mainIdx, 'email', 'fact', 10, { excludeNull: true });
 
   const factsTop = attachMode(computeDynList(mainIdx, compIdx, 'fact').sort((a, b) => b.mainCount - a.mainCount).slice(0, 8), mainIdx, 'fact', 'addr');
 
@@ -911,6 +911,28 @@ function renderReport(mainIdx, compIdx) {
   const growthFactPhrase = growthKeySet.size ? topThemePhrase(mainIdx.filter(i => growthKeySet.has(DATA.cols.podtema[i])), 'fact', 2) : '';
   const emailThemePhrase = topThemePhrase(mainIdx, 'podtema', 2);
   const kuratorThemePhrase = kuratorDyn.length ? kuratorDyn[0].modeLabel : '';
+
+  // ---- per-section conclusions: shown at the end of each section AND consolidated in "Итог" ----
+  const sectionConclusions = [];
+  function blockConclusion(text) {
+    sectionConclusions.push(text);
+    return `<div class="r-callout r-callout-mini"><div class="r-callout-icon">→</div><div class="r-callout-text"><strong>Вывод:</strong> ${text}</div></div>`;
+  }
+  const podtemaConclusion = (growthPodtema.length || declinePodtema.length)
+    ? `${growthPodtema.length ? `наибольший рост — «${escapeHtml(growthPodtema[0].label)}» (${fmtNum(growthPodtema[0].mainCount)}, ${pctText(growthPodtema[0].pct)})` : ''}${growthPodtema.length && declinePodtema.length ? '; ' : ''}${declinePodtema.length ? `наибольшее снижение — «${escapeHtml(declinePodtema[0].label)}» (${fmtNum(declinePodtema[0].mainCount)}, ${pctText(declinePodtema[0].pct)})` : ''}.`
+    : 'значимых изменений по подтемам не выявлено.';
+  const kuratorConclusion = kuratorDyn.length
+    ? `больше всего обращений у куратора «${escapeHtml(kuratorDyn[0].label)}» — ${fmtNum(kuratorDyn[0].mainCount)} (${total ? Math.round(kuratorDyn[0].mainCount / total * 1000) / 10 : 0}% от общего числа).`
+    : '';
+  const addrConclusion = addrDyn.length
+    ? `больше всего обращений по адресу «${escapeHtml(addrDyn[0].label)}» — ${fmtNum(addrDyn[0].mainCount)}${addrGrowth.length ? `; резче всего вырос адрес «${escapeHtml(addrGrowth[0].label)}» (${pctText(addrGrowth[0].pct)})` : ''}.`
+    : 'адресов с указанной улицей за период не найдено.';
+  const emailConclusion = topEmails.length
+    ? `самый активный заявитель — ${escapeHtml(topEmails[0].label)} (${topEmails[0].count} ${pluralRu(topEmails[0].count, ['обращение', 'обращения', 'обращений'])}).`
+    : '';
+  const razbivkaConclusion = (naprTop.length || istochnikTop.length)
+    ? `основное направление — «${naprTop.length ? escapeHtml(naprTop[0].label) : '—'}»${istochnikTop.length ? `, основной источник — «${escapeHtml(istochnikTop[0].label)}» (${total ? Math.round(istochnikTop[0].count / total * 1000) / 10 : 0}% от общего числа)` : ''}.`
+    : '';
 
   // ---- narrative takeaways ----
   const takeaways = [];
@@ -934,10 +956,31 @@ function renderReport(mainIdx, compIdx) {
   }
   takeaways.push(`Доля обращений в статусе «Решено» — <strong>${resolvedPct}%</strong> (${fmtNum(resolved)} из ${fmtNum(total)}), доля «В работе» — <strong>${Math.round((100 - resolvedPct) * 10) / 10}%</strong>.`);
 
+  // ---- plain-data model for PPTX export (no HTML markup) ----
+  const stripHtml = s => String(s).replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+  const reportModel = {
+    omsu: DATA.omsu, titleMain, scopeTitle, periodTxt, compTxt,
+    total, totalComp, dynPct: dyn.pct, dynDelta: dyn.delta, resolvedPct,
+    takeaways: takeaways.map(stripHtml),
+    growthPodtema: growthPodtema.map(r => ({ label: r.label, main: r.mainCount, comp: r.compCount, pct: r.pct, mode: r.modeLabel })),
+    declinePodtema: declinePodtema.map(r => ({ label: r.label, main: r.mainCount, comp: r.compCount, pct: r.pct, mode: r.modeLabel })),
+    factsTop: factsTop.map(r => ({ label: r.label, main: r.mainCount, comp: r.compCount, pct: r.pct, mode: r.modeLabel })),
+    kuratorDyn: kuratorDyn.map(r => ({ label: r.label, main: r.mainCount, comp: r.compCount, pct: r.pct, mode: r.modeLabel })),
+    addrDyn: addrDyn.map(r => ({ label: r.label, main: r.mainCount, comp: r.compCount, pct: r.pct, mode: r.modeLabel })),
+    addrGrowth: addrGrowth.map(r => ({ label: r.label, main: r.mainCount, comp: r.compCount, pct: r.pct, mode: r.modeLabel })),
+    topEmails: topEmails.map(r => ({ label: r.label, count: r.count, mode: r.modeLabel })),
+    naprTop: naprTop.map(r => ({ label: r.label, count: r.count })),
+    istochnikTop: istochnikTop.map(r => ({ label: r.label, count: r.count })),
+    tipTop: tipTop.map(r => ({ label: r.label, count: r.count })),
+    isOverall,
+    sectionConclusions: sectionConclusions.map(stripHtml),
+  };
+
   // ---- assemble HTML ----
   const html = `
   <div class="report-scope">
     <div class="r-toolbar no-print">
+      <button type="button" class="r-print-btn" id="r-pptx-btn">📊 Экспорт PPTX</button>
       <button type="button" class="r-print-btn" id="r-print-btn">🖨 Печать / PDF</button>
     </div>
 
@@ -1009,11 +1052,12 @@ function renderReport(mainIdx, compIdx) {
       <h2>Где хуже, а где лучше</h2>
       <p class="r-desc">${growthFactPhrase ? `Внутри растущих подтем чаще всего встречаются жалобы на ${growthFactPhrase}.` : 'Подтемы с наибольшим приростом и наибольшим снижением относительно периода сравнения.'}</p>
       <div class="r-grid2">
-        <div><h3>Наибольший прирост</h3>${dynTableHtml(growthPodtema, 'Подтема', { modeLabel: 'Чаще всего' })}</div>
-        <div><h3>Наибольшее снижение</h3>${dynTableHtml(declinePodtema, 'Подтема', { modeLabel: 'Чаще всего' })}</div>
+        <div><h3>Наибольший прирост</h3>${dynTableHtml(growthPodtema, 'Подтема', { modeLabel: 'Чаще всего жалуются' })}</div>
+        <div><h3>Наибольшее снижение</h3>${dynTableHtml(declinePodtema, 'Подтема', { modeLabel: 'Чаще всего жалуются' })}</div>
       </div>
       <h3>Топ фактов</h3>
       ${dynTableHtml(factsTop, 'Факт', { modeLabel: 'Адрес' })}
+      ${blockConclusion(podtemaConclusion)}
     </div>
 
     ${isOverall ? `
@@ -1021,7 +1065,8 @@ function renderReport(mainIdx, compIdx) {
       <div class="r-tag"><span class="n">04</span> Кураторы</div>
       <h2>Рейтинг кураторов по объёму</h2>
       <p class="r-desc">${kuratorThemePhrase ? `У куратора-лидера чаще всего жители жалуются на ${kuratorThemePhrase}.` : 'Кураторы с наибольшим объёмом обращений за основной период.'}</p>
-      ${dynTableHtml(kuratorDyn, 'Куратор', { modeLabel: 'Чаще всего' })}
+      ${dynTableHtml(kuratorDyn, 'Куратор', { modeLabel: 'Чаще всего жалуются' })}
+      ${blockConclusion(kuratorConclusion)}
     </div>` : ''}
 
     <div class="r-block">
@@ -1029,9 +1074,10 @@ function renderReport(mainIdx, compIdx) {
       <h2>Адреса — объём и точки роста</h2>
       <p class="r-desc">${addrThemePhrase ? `По адресам-лидерам чаще всего фигурируют жалобы на ${addrThemePhrase}. Справа — адреса с резким приростом обращений, потенциальные новые проблемные точки.` : 'Адреса с наибольшим числом обращений и наибольшим приростом.'}</p>
       <div class="r-grid2">
-        <div><h3>По объёму</h3>${dynTableHtml(addrDyn, 'Адрес', { modeLabel: 'Жалуются на' })}</div>
-        <div><h3>Резкий прирост</h3>${dynTableHtml(addrGrowth, 'Адрес', { modeLabel: 'Жалуются на' })}</div>
+        <div><h3>По объёму</h3>${dynTableHtml(addrDyn, 'Адрес', { modeLabel: 'Чаще всего жалуются' })}</div>
+        <div><h3>Резкий прирост</h3>${dynTableHtml(addrGrowth, 'Адрес', { modeLabel: 'Чаще всего жалуются' })}</div>
       </div>
+      ${blockConclusion(addrConclusion)}
     </div>
 
     <div class="r-block">
@@ -1041,9 +1087,10 @@ function renderReport(mainIdx, compIdx) {
       <div class="r-cards-grid">
         <div class="r-info-card">
           <div class="r-info-card-meta">Топ-10 заявителей · ${escapeHtml(scopeTitle)}</div>
-          ${topEmails.map((e, i) => `<div class="r-info-row"><span class="r-info-rank">${String(i + 1).padStart(2, '0')}</span><span class="r-info-text"><span class="r-info-email" title="${escapeHtml(e.label)}">${escapeHtml(e.label)}</span>${e.modeLabel ? `<div class="r-sub">Жалуется на: ${escapeHtml(e.modeLabel)}</div>` : ''}</span><span class="r-info-count">${e.count}</span></div>`).join('') || '<div class="empty-note">Нет данных</div>'}
+          ${topEmails.map((e, i) => `<div class="r-info-row"><span class="r-info-rank">${String(i + 1).padStart(2, '0')}</span><span class="r-info-text"><span class="r-info-email" title="${escapeHtml(e.label)}">${escapeHtml(e.label)}</span>${e.modeLabel ? `<div class="r-sub">Чаще всего жалуется: «${escapeHtml(e.modeLabel)}»</div>` : ''}</span><span class="r-info-count">${e.count}</span></div>`).join('') || '<div class="empty-note">Нет данных</div>'}
         </div>
       </div>
+      ${blockConclusion(emailConclusion)}
     </div>
 
     <div class="r-block">
@@ -1057,24 +1104,24 @@ function renderReport(mainIdx, compIdx) {
       </div>
       <h3>Направления</h3>${barTableHtml(naprTop)}
       <h3>Тип сообщения</h3>${barTableHtml(tipTop)}
+      ${blockConclusion(razbivkaConclusion)}
     </div>
 
     <div class="r-block">
-      <div class="r-tag"><span class="n">99</span> Развитие справки</div>
-      <h2>Что можно добавить дальше</h2>
-      <p class="r-desc">Текст обращения («Описание») сейчас не включён в данные дашборда — только категории (подтема/факт/направление). Чтобы оценивать социальную значимость и тональность обращений по самому тексту, нужно отдельно подключить анализ текста: это заметно увеличит объём данных и потребует отдельного шага обработки. Если это актуально — можно обсудить отдельно, как лучше это сделать.</p>
+      <div class="r-tag"><span class="n">99</span> О формулировках «Чаще всего жалуются»</div>
+      <h2>Как это считается</h2>
+      <p class="r-desc">Текст самого обращения («Описание») в данные дашборда не включён — только категории, которые уже проставлены в ЕЦУР (подтема/факт/направление). Формулировки «чаще всего жалуются: «...»» в этой справке — это самый частый факт (конкретная закодированная жалоба, а не голая категория) для соответствующей строки, а не результат анализа свободного текста. Полноценный анализ текста обращений — отдельная задача: потребует включить «Описание» в данные (заметно увеличит объём) и подключить обработку текста.</p>
     </div>
 
     <div class="r-block">
       <div class="r-tag"><span class="n">08</span> Итог</div>
       <h2>Итоговая сводка</h2>
-      <p class="r-desc">Краткое резюме по срезу «${escapeHtml(scopeTitle)}» за ${periodTxt}.</p>
+      <p class="r-desc">Все выводы по разделам справки — в одном месте, по срезу «${escapeHtml(scopeTitle)}» за ${periodTxt}.</p>
       <div class="r-callout ${dyn.delta >= 0 ? 'bad' : ''}">
         <div class="r-callout-icon">${dyn.delta >= 0 ? '↑' : '↓'}</div>
-        <div class="r-callout-text"><strong>Итог:</strong> обращения по срезу «${escapeHtml(scopeTitle)}» ${dyn.delta >= 0 ? 'выросли' : 'снизились'} с ${fmtNum(totalComp)} до ${fmtNum(total)} (${pctText(dyn.pct)}).
-        ${growthPodtema.length ? ` Наибольшего внимания требует подтема «${escapeHtml(growthPodtema[0].label)}» (${pctText(growthPodtema[0].pct)}).` : ''}
-        ${declinePodtema.length ? ` Заметно улучшилась ситуация по теме «${escapeHtml(declinePodtema[0].label)}» (${pctText(declinePodtema[0].pct)}).` : ''}</div>
+        <div class="r-callout-text"><strong>Общая динамика:</strong> обращения по срезу «${escapeHtml(scopeTitle)}» ${dyn.delta >= 0 ? 'выросли' : 'снизились'} с ${fmtNum(totalComp)} до ${fmtNum(total)} (${pctText(dyn.pct)}).</div>
       </div>
+      ${sectionConclusions.map((t, i) => `<div class="r-takeaway"><div class="r-takeaway-num">${String(i + 1).padStart(2, '0')}</div><div class="r-takeaway-text">${t}</div></div>`).join('')}
     </div>
 
     <div class="r-footer">Дашборд обращений граждан · ${escapeHtml(DATA.omsu)} · Отчётный период: ${periodTxt} в сопоставлении с ${compTxt} · Срез: ${escapeHtml(scopeTitle)} · Сформировано ${new Date().toLocaleString('ru-RU')}</div>
@@ -1083,6 +1130,9 @@ function renderReport(mainIdx, compIdx) {
   root.innerHTML = html;
   const printBtn = document.getElementById('r-print-btn');
   if (printBtn) printBtn.addEventListener('click', () => window.print());
+  window.__lastReportModel = reportModel;
+  const pptxBtn = document.getElementById('r-pptx-btn');
+  if (pptxBtn) pptxBtn.addEventListener('click', () => exportReportPptx(reportModel));
 }
 
 function barTableHtml(rows) {
@@ -1158,26 +1208,166 @@ function sourceStatusTableHtml(mainIdx, compIdx) {
 }
 
 
-function exportCsv() {
-  const idxArr = window.__lastMainIdx || [];
-  const cols = ['date', 'napr', 'sint', 'fact', 'podtema', 'status', 'kurator', 'ispolnitel', 'tip', 'istochnik', 'uk', 'addr', 'naspunkt', 'rayon', 'email', 'spam'];
-  const headers = ['Дата', 'Направление', 'Синт.группа', 'Факт', 'Подтема', 'Статус', 'Куратор', 'Исполнитель', 'Тип сообщения', 'Источник', 'УК', 'Адрес', 'Населённый пункт', 'Район', 'Почта заявителя', 'Спам'];
-  const lines = [headers.join(';')];
+function buildExportRows(idxArr) {
+  const cols = ['ecur', 'numsrc', 'date', 'napr', 'sint', 'fact', 'podtema', 'status', 'kurator', 'ispolnitel', 'tip', 'istochnik', 'uk', 'addr', 'naspunkt', 'rayon', 'email', 'spam', 'overdue', 'hasRepeats', 'repeats', 'hasDelay', 'delayCount'];
+  const headers = ['Номер ЕЦУР', 'Номер в источнике', 'Дата', 'Направление', 'Синт.группа', 'Факт', 'Подтема', 'Статус', 'Куратор', 'Исполнитель', 'Тип сообщения', 'Источник', 'УК', 'Адрес', 'Населённый пункт', 'Район', 'Почта заявителя', 'Спам', 'Просрочка', 'Есть повторы', 'Кол-во повторов', 'Есть отложки', 'Кол-во отложенных решений'];
+  const plainCols = new Set(['ecur', 'numsrc', 'repeats', 'delayCount']);
+  const rows = [headers];
   for (const i of idxArr) {
-    const row = cols.map(c => {
+    rows.push(cols.map(c => {
       if (c === 'date') return fmtDateRu(dayToISO(DATA.cols.date[i]));
+      if (plainCols.has(c)) return DATA.cols[c][i] ?? '';
       const v = DATA.cols[c][i];
-      const val = v === -1 ? '' : DATA.dicts[c][v];
-      return '"' + String(val).replace(/"/g, '""') + '"';
-    });
-    lines.push(row.join(';'));
+      return v === -1 ? '' : DATA.dicts[c][v];
+    }));
   }
-  const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+  return rows;
+}
+
+/* ================= Report -> PPTX export (hand-built minimal OOXML via JSZip) ================= */
+function pxmlEscape(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+}
+function pptxBulletXml(text, opts) {
+  opts = opts || {};
+  const sz = opts.sz || 1400;
+  const bold = opts.bold ? ' b="1"' : '';
+  const color = opts.color ? `<a:solidFill><a:srgbClr val="${opts.color}"/></a:solidFill>` : '';
+  const bullet = opts.noBullet ? '<a:buNone/>' : '<a:buFont typeface="Arial"/><a:buChar char="\u2022"/>';
+  const indentAttr = opts.noBullet ? '' : ' marL="228600" indent="-228600"';
+  const spcAttr = opts.spaceBefore ? `<a:spcBef><a:spcPts val="${opts.spaceBefore}"/></a:spcBef>` : '';
+  return `<a:p><a:pPr${indentAttr}>${spcAttr}${bullet}</a:pPr><a:r><a:rPr lang="ru-RU" sz="${sz}"${bold} dirty="0">${color}</a:rPr><a:t>${pxmlEscape(text)}</a:t></a:r></a:p>`;
+}
+function pptxSlideXml(title, bodyParagraphsXml) {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/><p:sp><p:nvSpPr><p:cNvPr id="2" name="Title"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="457200" y="274638"/><a:ext cx="11277600" cy="838200"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="ru-RU" sz="2600" b="1" dirty="0"><a:solidFill><a:srgbClr val="06223F"/></a:solidFill></a:rPr><a:t>${pxmlEscape(title)}</a:t></a:r></a:p></p:txBody></p:sp><p:sp><p:nvSpPr><p:cNvPr id="3" name="Body"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="457200" y="1200150"/><a:ext cx="11277600" cy="5400675"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr><p:txBody><a:bodyPr><a:normAutofit fontScale="85000" lnSpcReduction="10000"/></a:bodyPr><a:lstStyle/>${bodyParagraphsXml}</p:txBody></p:sp></p:spTree></p:cSld><p:clrMapOvr><a:overrideClrMapping bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/></p:clrMapOvr></p:sld>`;
+}
+
+function pptxRankLines(rows, opts) {
+  opts = opts || {};
+  return rows.map((r, i) => {
+    const main = `${String(i + 1).padStart(2, '0')}. ${r.label} — ${fmtNum(r.main != null ? r.main : r.count)}${r.comp != null ? ` (было ${fmtNum(r.comp)}, ${pctText(r.pct)})` : ''}`;
+    let out = pptxBulletXml(main, { sz: 1300 });
+    if (r.mode) out += pptxBulletXml(`Чаще всего жалуются: «${r.mode}»`, { sz: 1050, noBullet: true, color: '5C7AA3' });
+    return out;
+  }).join('');
+}
+
+function buildReportSlides(m) {
+  const slides = [];
+  // 1. title
+  slides.push({
+    title: `${m.omsu} · ${m.titleMain}`,
+    body: [
+      pptxBulletXml(`Период: ${m.periodTxt}`, { noBullet: true, sz: 1600 }),
+      pptxBulletXml(`Сравнение: ${m.compTxt}`, { noBullet: true, sz: 1600 }),
+      pptxBulletXml(`Срез: ${m.scopeTitle}`, { noBullet: true, sz: 1600 }),
+      pptxBulletXml(`Всего обращений: ${fmtNum(m.total)} (${pctText(m.dynPct)} к сравнению)`, { noBullet: true, sz: 1600, bold: true }),
+      pptxBulletXml(`Решено: ${m.resolvedPct}%`, { noBullet: true, sz: 1600 }),
+    ].join(''),
+  });
+  // 2. takeaways
+  slides.push({ title: 'Ключевые выводы', body: m.takeaways.map(t => pptxBulletXml(t, { sz: 1300 })).join('') });
+  // 3. growth
+  if (m.growthPodtema.length) slides.push({ title: 'Подтемы — наибольший прирост', body: pptxRankLines(m.growthPodtema) });
+  if (m.declinePodtema.length) slides.push({ title: 'Подтемы — наибольшее снижение', body: pptxRankLines(m.declinePodtema) });
+  if (m.factsTop.length) slides.push({ title: 'Топ фактов', body: pptxRankLines(m.factsTop) });
+  if (m.isOverall && m.kuratorDyn.length) slides.push({ title: 'Рейтинг кураторов по объёму', body: pptxRankLines(m.kuratorDyn) });
+  if (m.addrDyn.length) slides.push({ title: 'Адреса — по объёму', body: pptxRankLines(m.addrDyn) });
+  if (m.addrGrowth.length) slides.push({ title: 'Адреса — резкий прирост', body: pptxRankLines(m.addrGrowth) });
+  if (m.topEmails.length) slides.push({ title: 'Активные заявители', body: pptxRankLines(m.topEmails) });
+  const razbBody = [
+    pptxBulletXml('Направления', { bold: true, sz: 1300 }),
+    ...m.naprTop.map(r => pptxBulletXml(`${r.label} — ${fmtNum(r.count)}`, { sz: 1150 })),
+    pptxBulletXml('Источники', { bold: true, sz: 1300, spaceBefore: 1200 }),
+    ...m.istochnikTop.map(r => pptxBulletXml(`${r.label} — ${fmtNum(r.count)}`, { sz: 1150 })),
+  ].join('');
+  slides.push({ title: 'Направления и источники', body: razbBody });
+  // final: итог
+  const itogBody = [
+    pptxBulletXml(`Обращения ${m.dynDelta >= 0 ? 'выросли' : 'снизились'} с ${fmtNum(m.totalComp)} до ${fmtNum(m.total)} (${pctText(m.dynPct)})`, { bold: true, sz: 1400 }),
+    ...m.sectionConclusions.map(t => pptxBulletXml(t, { sz: 1250 })),
+  ].join('');
+  slides.push({ title: 'Итоговая сводка', body: itogBody });
+  return slides;
+}
+
+const PPTX_CONTENT_TYPES = (n) => `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/><Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/><Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/><Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>${Array.from({ length: n }, (_, i) => `<Override PartName="/ppt/slides/slide${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`).join('')}</Types>`;
+
+const PPTX_ROOT_RELS = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/></Relationships>`;
+
+const PPTX_PRESENTATION = (n) => `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rIdMaster1"/></p:sldMasterIdLst><p:sldIdLst>${Array.from({ length: n }, (_, i) => `<p:sldId id="${256 + i}" r:id="rIdSlide${i + 1}"/>`).join('')}</p:sldIdLst><p:sldSz cx="12192000" cy="6858000"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>`;
+
+const PPTX_PRESENTATION_RELS = (n) => `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdMaster1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="slideMasters/slideMaster1.xml"/>${Array.from({ length: n }, (_, i) => `<Relationship Id="rIdSlide${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide${i + 1}.xml"/>`).join('')}</Relationships>`;
+
+const PPTX_SLIDE_MASTER = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sldMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:bg><p:bgPr><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill><a:effectLst/></p:bgPr></p:bg><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld><p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/><p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst></p:sldMaster>`;
+
+const PPTX_SLIDE_MASTER_RELS = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="../theme/theme1.xml"/></Relationships>`;
+
+const PPTX_SLIDE_LAYOUT = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" type="blank" preserve="1"><p:cSld name="Blank"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld><p:clrMapOvr><a:overrideClrMapping bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/></p:clrMapOvr></p:sldLayout>`;
+
+const PPTX_SLIDE_LAYOUT_RELS = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/></Relationships>`;
+
+const PPTX_THEME = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Custom"><a:themeElements><a:clrScheme name="Custom"><a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1><a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="06223F"/></a:dk2><a:lt2><a:srgbClr val="E8EEF7"/></a:lt2><a:accent1><a:srgbClr val="1456A8"/></a:accent1><a:accent2><a:srgbClr val="B91C1C"/></a:accent2><a:accent3><a:srgbClr val="15803D"/></a:accent3><a:accent4><a:srgbClr val="A86600"/></a:accent4><a:accent5><a:srgbClr val="1D6FC4"/></a:accent5><a:accent6><a:srgbClr val="7F1414"/></a:accent6><a:hlink><a:srgbClr val="1456A8"/></a:hlink><a:folHlink><a:srgbClr val="7F1414"/></a:folHlink></a:clrScheme><a:fontScheme name="Custom"><a:majorFont><a:latin typeface="Calibri"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont><a:minorFont><a:latin typeface="Calibri"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont></a:fontScheme><a:fmtScheme name="Custom"><a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:fillStyleLst><a:lnStyleLst><a:ln w="6350"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="12700"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="19050"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst><a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst><a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>`;
+
+async function exportReportPptx(model) {
+  if (typeof JSZip === 'undefined') {
+    alert('Не удалось загрузить библиотеку экспорта (нужен интернет для загрузки jszip.js). Попробуйте обновить страницу.');
+    return;
+  }
+  const slides = buildReportSlides(model);
+  const zip = new JSZip();
+  zip.file('[Content_Types].xml', PPTX_CONTENT_TYPES(slides.length));
+  zip.file('_rels/.rels', PPTX_ROOT_RELS);
+  zip.file('ppt/presentation.xml', PPTX_PRESENTATION(slides.length));
+  zip.file('ppt/_rels/presentation.xml.rels', PPTX_PRESENTATION_RELS(slides.length));
+  zip.file('ppt/slideMasters/slideMaster1.xml', PPTX_SLIDE_MASTER);
+  zip.file('ppt/slideMasters/_rels/slideMaster1.xml.rels', PPTX_SLIDE_MASTER_RELS);
+  zip.file('ppt/slideLayouts/slideLayout1.xml', PPTX_SLIDE_LAYOUT);
+  zip.file('ppt/slideLayouts/_rels/slideLayout1.xml.rels', PPTX_SLIDE_LAYOUT_RELS);
+  zip.file('ppt/theme/theme1.xml', PPTX_THEME);
+  slides.forEach((s, i) => {
+    zip.file(`ppt/slides/slide${i + 1}.xml`, pptxSlideXml(s.title, s.body));
+  });
+  const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = `obrasheniya_${fmtDateRu(dayToISO(state.mainStart))}_${fmtDateRu(dayToISO(state.mainEnd))}.csv`;
+  a.href = url;
+  a.download = `spravka_${fmtDateRu(dayToISO(state.mainStart))}_${fmtDateRu(dayToISO(state.mainEnd))}.pptx`;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+function exportXlsx() {
+  const idxArr = window.__lastMainIdx || [];
+  const filename = `obrasheniya_${fmtDateRu(dayToISO(state.mainStart))}_${fmtDateRu(dayToISO(state.mainEnd))}.xlsx`;
+
+  if (typeof XLSX === 'undefined') {
+    alert('Не удалось загрузить библиотеку экспорта (нужен интернет для загрузки xlsx.js). Попробуйте обновить страницу.');
+    return;
+  }
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(buildExportRows(idxArr)), 'Детализация');
+
+  const overdueIdx = idxArr.filter(i => DATA.cols.overdue[i] === 1);
+  const repeatsIdx = idxArr.filter(i => DATA.cols.hasRepeats[i] === 1);
+  const delayIdx = idxArr.filter(i => DATA.cols.hasDelay[i] === 1);
+
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(buildExportRows(overdueIdx)), 'Просрочки');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(buildExportRows(repeatsIdx)), 'Повторы');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(buildExportRows(delayIdx)), 'Отложки');
+
+  XLSX.writeFile(wb, filename);
 }
 
 /* ================= Init ================= */
@@ -1234,7 +1424,7 @@ function init() {
 
   document.getElementById('btnApply').addEventListener('click', applyAll);
   document.getElementById('btnReset').addEventListener('click', resetFilters);
-  document.getElementById('btnExport').addEventListener('click', exportCsv);
+  document.getElementById('btnExport').addEventListener('click', exportXlsx);
   document.getElementById('moreToggle').addEventListener('click', () => {
     document.getElementById('extraFilters').classList.toggle('open');
     document.getElementById('moreToggle').classList.toggle('open');

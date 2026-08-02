@@ -448,6 +448,12 @@ canvas{max-width:100%;}
 .report-scope .r-callout:not(.bad) .r-callout-icon{color:var(--r-down-strong);}
 .report-scope .r-callout-text{font-size:13.5px; line-height:1.55; color:var(--r-text); font-weight:500;}
 .report-scope .r-callout-text strong{color:var(--r-text-strong);}
+.report-scope .r-callout.r-callout-mini{
+  background:var(--r-blue-50); border-color:var(--r-blue-200); border-left-color:var(--r-blue-600);
+  padding:11px 16px; margin-top:14px;
+}
+.report-scope .r-callout.r-callout-mini .r-callout-icon{font-size:18px; color:var(--r-blue-700);}
+.report-scope .r-callout.r-callout-mini .r-callout-text{font-size:12.5px;}
 
 .report-scope .r-cards-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:14px;}
 @media(max-width:760px){.report-scope .r-cards-grid{grid-template-columns:1fr;}}

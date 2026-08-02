@@ -6,6 +6,8 @@
 <title>Дашборд обращений — Солнечногорск</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&family=Manrope:wght@500;600;700;800&family=Bebas+Neue&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -56,7 +58,7 @@
       <div class="btn-row">
         <button class="btn primary" id="btnApply">⚡ Сформировать</button>
         <button class="btn ghost" id="btnReset">↺ Сбросить всё</button>
-        <button class="btn" id="btnExport">⭳ Экспорт CSV</button>
+        <button class="btn" id="btnExport">⭳ Экспорт XLSX</button>
       </div>
     </div>
     <div class="filters-row" id="primaryFilters"></div>
