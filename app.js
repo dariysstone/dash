@@ -1130,12 +1130,6 @@ function renderReport(mainIdx, compIdx) {
     </div>
 
     <div class="r-block">
-      <div class="r-tag"><span class="n">99</span> Как считаются «частые слова» и «жалуются на»</div>
-      <h2>Как это считается</h2>
-      <p class="r-desc">Формулировки «чаще всего жалуются: «...»» — это самый частый факт (конкретная закодированная жалоба из ЕЦУР) для соответствующей строки. «Частые слова в обращениях» — это уже частотный анализ текста самого обращения («Описание»): из текста убраны служебные строки (номер заявки, координаты, повтор адреса) и персональные данные (ФИО заявителя — как из отдельной строки авторизации, так и из типовых самоопределений вида «Я, Фамилия Имя Отчество» — вырезаются вместе с отчествами и распространёнными именами до подсчёта слов), из оставшегося текста считаются самые частые значимые слова. Это подсчёт частоты слов, а не смысловой анализ или определение тональности — предложения вида «жаловались на плохую уборку мусора» дашборд не формулирует, а показывает набор частых слов (например: «мусор, уборка, контейнер»).</p>
-    </div>
-
-    <div class="r-block">
       <div class="r-tag"><span class="n">08</span> Итог</div>
       <h2>Итоговая сводка</h2>
       <p class="r-desc">Все выводы по разделам справки — в одном месте, по срезу «${escapeHtml(scopeTitle)}» за ${periodTxt}.</p>
@@ -1316,10 +1310,19 @@ function buildReportSlides(m) {
 }
 
 const PPTX_CONTENT_TYPES = (n) => `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/><Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/><Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/><Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>${Array.from({ length: n }, (_, i) => `<Override PartName="/ppt/slides/slide${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`).join('')}</Types>`;
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/><Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/><Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/><Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/><Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>${Array.from({ length: n }, (_, i) => `<Override PartName="/ppt/slides/slide${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`).join('')}</Types>`;
 
 const PPTX_ROOT_RELS = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/></Relationships>`;
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>`;
+
+const PPTX_CORE_XML = (title) => `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>${pxmlEscape(title)}</dc:title><dc:creator>Дашборд обращений граждан</dc:creator><cp:lastModifiedBy>Дашборд обращений граждан</cp:lastModifiedBy><dcterms:created xsi:type="dcterms:W3CDTF">${new Date().toISOString()}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${new Date().toISOString()}</dcterms:modified></cp:coreProperties>`;
+
+const PPTX_APP_XML = (n) => `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>Дашборд обращений граждан</Application><Slides>${n}</Slides><PresentationFormat>On-screen Show (16:9)</PresentationFormat><TitlesOfParts><vt:vector size="${n}" baseType="lpstr">${Array.from({ length: n }, () => '<vt:lpstr>Slide</vt:lpstr>').join('')}</vt:vector></TitlesOfParts><Company></Company><LinksUpToDate>false</LinksUpToDate><SharedDoc>false</SharedDoc><HyperlinksChanged>false</HyperlinksChanged><AppVersion>16.0000</AppVersion></Properties>`;
+
+const PPTX_SLIDE_RELS = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/></Relationships>`;
 
 const PPTX_PRESENTATION = (n) => `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rIdMaster1"/></p:sldMasterIdLst><p:sldIdLst>${Array.from({ length: n }, (_, i) => `<p:sldId id="${256 + i}" r:id="rIdSlide${i + 1}"/>`).join('')}</p:sldIdLst><p:sldSz cx="12192000" cy="6858000"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>`;
@@ -1351,6 +1354,8 @@ async function exportReportPptx(model) {
   const zip = new JSZip();
   zip.file('[Content_Types].xml', PPTX_CONTENT_TYPES(slides.length));
   zip.file('_rels/.rels', PPTX_ROOT_RELS);
+  zip.file('docProps/core.xml', PPTX_CORE_XML(`${model.omsu} · ${model.titleMain}`));
+  zip.file('docProps/app.xml', PPTX_APP_XML(slides.length));
   zip.file('ppt/presentation.xml', PPTX_PRESENTATION(slides.length));
   zip.file('ppt/_rels/presentation.xml.rels', PPTX_PRESENTATION_RELS(slides.length));
   zip.file('ppt/slideMasters/slideMaster1.xml', PPTX_SLIDE_MASTER);
@@ -1360,6 +1365,7 @@ async function exportReportPptx(model) {
   zip.file('ppt/theme/theme1.xml', PPTX_THEME);
   slides.forEach((s, i) => {
     zip.file(`ppt/slides/slide${i + 1}.xml`, pptxSlideXml(s.title, s.body));
+    zip.file(`ppt/slides/_rels/slide${i + 1}.xml.rels`, PPTX_SLIDE_RELS);
   });
   const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' });
   const url = URL.createObjectURL(blob);
