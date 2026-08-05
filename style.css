@@ -355,6 +355,19 @@ canvas{max-width:100%;}
 }
 .report-scope .r-hstat-value{font-family:'Bebas Neue',sans-serif; font-size:26px; color:#fff; line-height:1.1;}
 
+.report-scope .r-mini-stats{
+  display:flex; gap:32px; flex-wrap:wrap; background:var(--r-blue-900); border-radius:9px;
+  padding:14px 22px; margin-bottom:18px;
+}
+.report-scope .r-mini-stats > div{display:flex; flex-direction:column; gap:4px;}
+.report-scope .r-mini-label{
+  font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#a8c8ed; letter-spacing:.1em;
+  text-transform:uppercase; font-weight:600;
+}
+.report-scope .r-mini-value{font-family:'Bebas Neue',sans-serif; font-size:24px; color:#fff; line-height:1.1;}
+.report-scope .r-mini-value.r-mini-bad{color:#ff8a8a;}
+.report-scope .r-mini-value.r-mini-good{color:#7be8a4;}
+
 .report-scope .r-tag{
   display:inline-flex; align-items:center; gap:10px; background:var(--r-blue-700); color:#fff;
   padding:7px 13px; border-radius:6px; font-family:'JetBrains Mono',monospace; font-size:12px;

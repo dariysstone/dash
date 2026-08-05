@@ -1032,11 +1032,6 @@ function renderReport(mainIdx, compIdx) {
         <h1>${escapeHtml(DATA.omsu)} <span>· ${escapeHtml(titleMain)}</span></h1>
         <div class="r-header-sub">Анализ обращений за период ${periodTxt} в сравнении с ${compTxt}. Срез: ${escapeHtml(scopeTitle)}.</div>
       </div>
-      <div class="r-header-stats">
-        <div><div class="r-hstat-label">Всего обращений</div><div class="r-hstat-value">${fmtNum(total)}</div></div>
-        <div><div class="r-hstat-label">Динамика</div><div class="r-hstat-value">${deltaPctText(dyn.delta, dyn.pct)}</div></div>
-        <div><div class="r-hstat-label">Решено</div><div class="r-hstat-value">${resolvedPct}%</div></div>
-      </div>
     </header>
 
     <div class="r-block r-toc-block">
@@ -1064,6 +1059,11 @@ function renderReport(mainIdx, compIdx) {
       <div class="r-tag"><span class="n">02</span> Разбивка</div>
       <h2>Направления, источники, тип сообщения</h2>
       <p class="r-desc">${naprTop.length ? `Больше всего обращений приходится на направление «${escapeHtml(naprTop[0].label)}»${istochnikTop.length ? `, основной канал поступления — «${escapeHtml(istochnikTop[0].label)}»` : ''}.` : ''}</p>
+      <div class="r-mini-stats">
+        <div><span class="r-mini-label">Всего обращений</span><span class="r-mini-value">${fmtNum(total)}</span></div>
+        <div><span class="r-mini-label">Динамика</span><span class="r-mini-value ${dyn.delta >= 0 ? 'r-mini-bad' : 'r-mini-good'}">${deltaPctText(dyn.delta, dyn.pct)}</span></div>
+        <div><span class="r-mini-label">Решено</span><span class="r-mini-value">${resolvedPct}%</span></div>
+      </div>
       <h3>По источникам</h3>
       <div class="r-grid2">
         <div>${sourceStatusTableHtml(mainIdx, compIdx)}</div>
