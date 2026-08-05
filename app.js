@@ -1002,7 +1002,7 @@ function renderReport(mainIdx, compIdx) {
   const stripHtml = s => String(s).replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
   const reportModel = {
     omsu: DATA.omsu, titleMain, scopeTitle, periodTxt, compTxt,
-    total, totalComp, dynPct: dyn.pct, dynDelta: dyn.delta, resolvedPct,
+    total, totalComp, dynPct: dyn.pct, dynDelta: dyn.delta, resolvedPct, resolved,
     takeaways: takeaways.map(stripHtml),
     growthPodtema: growthPodtema.map(r => ({ label: r.label, main: r.mainCount, comp: r.compCount, pct: r.pct, mode: r.modeLabel, kw: r.keywordPhrase, kurator: r.kuratorLabel })),
     declinePodtema: declinePodtema.map(r => ({ label: r.label, main: r.mainCount, comp: r.compCount, pct: r.pct, mode: r.modeLabel, kw: r.keywordPhrase, kurator: r.kuratorLabel })),
@@ -1062,7 +1062,7 @@ function renderReport(mainIdx, compIdx) {
       <div class="r-mini-stats">
         <div><span class="r-mini-label">Всего обращений</span><span class="r-mini-value">${fmtNum(total)}</span></div>
         <div><span class="r-mini-label">Динамика</span><span class="r-mini-value ${dyn.delta >= 0 ? 'r-mini-bad' : 'r-mini-good'}">${deltaPctText(dyn.delta, dyn.pct)}</span></div>
-        <div><span class="r-mini-label">Решено</span><span class="r-mini-value">${resolvedPct}%</span></div>
+        <div><span class="r-mini-label">Решено</span><span class="r-mini-value">${fmtNum(resolved)} (${resolvedPct}%)</span></div>
       </div>
       <h3>По источникам</h3>
       <div class="r-grid2">
@@ -1414,7 +1414,7 @@ function buildReportSlides(m) {
       pptxBulletXml(`Сравнение: ${m.compTxt}`, { noBullet: true, sz: 1600 }),
       pptxBulletXml(`Срез: ${m.scopeTitle}`, { noBullet: true, sz: 1600 }),
       pptxBulletXml(`Всего обращений: ${fmtNum(m.total)} (${deltaPctText(m.dynDelta, m.dynPct)} к сравнению)`, { noBullet: true, sz: 1600, bold: true }),
-      pptxBulletXml(`Решено: ${m.resolvedPct}%`, { noBullet: true, sz: 1600 }),
+      pptxBulletXml(`Решено: ${fmtNum(m.resolved)} (${m.resolvedPct}%)`, { noBullet: true, sz: 1600 }),
     ].join(''),
   });
   // 2. takeaways
