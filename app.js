@@ -37,7 +37,7 @@ function statusBlockHtml(idxArr) {
   const rows = [{ label: 'Решено', count: resolved }, { label: 'В работе', count: inWork }];
   const maxCount = Math.max(resolved, inWork, 1);
   let html = `<div class="toplist">` + rows.map(o => {
-    const pct = Math.round((o.count / total) * 1000) / 10;
+    const pct = Math.round((o.count / total) * 100);
     const barPct = Math.round((o.count / maxCount) * 100);
     return `<div class="toprow">
       <span class="name">${o.label}</span>
@@ -47,7 +47,7 @@ function statusBlockHtml(idxArr) {
     </div>`;
   }).join('') + `</div>`;
   if (inWork > 0 && (overdueInWork || repeatsInWork || delayInWork)) {
-    const pctOf = n => inWork ? Math.round(n / inWork * 1000) / 10 : 0;
+    const pctOf = n => inWork ? Math.round(n / inWork * 100) : 0;
     html += `<div class="status-subnote">Из «В работе»: просрочено — <b>${overdueInWork}</b> (${pctOf(overdueInWork)}%) · с повторами — <b>${repeatsInWork}</b> (${pctOf(repeatsInWork)}%) · с отложенными решениями — <b>${delayInWork}</b> (${pctOf(delayInWork)}%)</div>`;
   }
   return html;
@@ -150,7 +150,7 @@ function dynamics(mainCount, compCount) {
   if (compCount === 0 && mainCount === 0) return { pct: 0, delta: 0 };
   if (compCount === 0) return { pct: mainCount * 100, delta: mainCount };
   const delta = mainCount - compCount;
-  return { pct: Math.round((delta / compCount) * 1000) / 10, delta };
+  return { pct: Math.round((delta / compCount) * 100), delta };
 }
 function deltaHtml(dyn) {
   // Fewer обращения is a good outcome here, so color is inverted relative to the raw sign:
@@ -743,6 +743,25 @@ function attachMode(rows, idxArr, colName, modeCol) {
   });
   return rows;
 }
+// Attach an additional dominant-value annotation under a custom property (doesn't overwrite modeLabel),
+// e.g. attachExtra(growthPodtema, mainIdx, 'podtema', 'kurator', 'kuratorLabel') to also show the curator.
+function attachExtra(rows, idxArr, colName, modeCol, propName) {
+  const col = DATA.cols[colName];
+  const col2 = DATA.cols[modeCol];
+  const dict2 = DATA.dicts[modeCol];
+  rows.forEach(r => {
+    const modeCounts = new Map();
+    for (const i of idxArr) {
+      if (col[i] !== r.key) continue;
+      const v2 = col2[i];
+      modeCounts.set(v2, (modeCounts.get(v2) || 0) + 1);
+    }
+    let bestK = null, bestC = -1;
+    for (const [k, c] of modeCounts.entries()) { if (c > bestC) { bestC = c; bestK = k; } }
+    r[propName] = (bestK == null || bestK === -1) ? null : dict2[bestK];
+  });
+  return rows;
+}
 // Short "chiefly complained about X and Y" phrase for section intros, computed straight from the data.
 function topThemePhrase(idxArr, colName, topN) {
   const top = countBy(idxArr, colName, { excludeNull: true }).slice(0, topN || 2);
@@ -754,11 +773,11 @@ function dynTableHtml(rows, colLabel, opts) {
   opts = opts || {};
   if (!rows.length) return `<div class="empty-note">Нет данных</div>`;
   return `<div class="r-table-wrap"><table>
-    <thead><tr><th style="width:28px">№</th><th>${escapeHtml(colLabel)}</th><th style="width:80px">Сравн.</th><th style="width:80px">Осн.</th><th style="width:78px">Динамика</th></tr></thead>
+    <thead><tr><th style="width:28px">№</th><th>${escapeHtml(colLabel)}</th><th style="width:100px">Прошлый период</th><th style="width:100px">Текущий период</th><th style="width:78px">Динамика</th></tr></thead>
     <tbody>${rows.map((r, i) => `
       <tr class="${reportRowClass(r.pct)}">
         <td class="r-rank">${String(i + 1).padStart(2, '0')}</td>
-        <td>${escapeHtml(r.label)}${r.delta >= 0 ? growthBadgeHtml(r.pct) : declineBadgeHtml(r.pct)}${r.modeLabel ? `<div class="r-sub">${escapeHtml(opts.modeLabel || 'Чаще всего жалуются')}: «${escapeHtml(r.modeLabel)}»</div>` : ''}${r.keywordPhrase ? `<div class="r-sub r-sub-kw">Частые слова в обращениях: ${escapeHtml(r.keywordPhrase)}</div>` : ''}</td>
+        <td>${escapeHtml(r.label)}${r.delta >= 0 ? growthBadgeHtml(r.pct) : declineBadgeHtml(r.pct)}${r.kuratorLabel ? `<div class="r-sub r-sub-kurator">Куратор: ${escapeHtml(r.kuratorLabel)}</div>` : ''}${r.modeLabel ? `<div class="r-sub">${escapeHtml(opts.modeLabel || 'Чаще всего жалуются')}: «${escapeHtml(r.modeLabel)}»</div>` : ''}${r.keywordPhrase ? `<div class="r-sub r-sub-kw">Частые слова в обращениях: ${escapeHtml(r.keywordPhrase)}</div>` : ''}</td>
         <td class="r-num">${fmtNum(r.compCount)}</td>
         <td class="r-num">${fmtNum(r.mainCount)}</td>
         <td class="r-delta ${r.delta >= 0 ? 'bad' : 'good'}">${pctText(r.pct)}</td>
@@ -904,15 +923,15 @@ function renderReport(mainIdx, compIdx) {
   const compAddr = compIdx.filter(i => DATA.cols.ulitsa[i] !== -1);
   let resolved = 0;
   for (const i of mainIdx) if (RESOLVED_STATUS_IDX.has(DATA.cols.status[i])) resolved++;
-  const resolvedPct = total ? Math.round(resolved / total * 1000) / 10 : 0;
+  const resolvedPct = total ? Math.round(resolved / total * 100) : 0;
 
   const periodTxt = `${fmtDateRu(dayToISO(state.mainStart))} – ${fmtDateRu(dayToISO(state.mainEnd))}`;
   const compTxt = `${fmtDateRu(dayToISO(state.compStart))} – ${fmtDateRu(dayToISO(state.compEnd))}`;
 
   // ---- rankings ----
   const podtemaDyn = computeDynList(mainIdx, compIdx, 'podtema');
-  const growthPodtema = attachMode(podtemaDyn.filter(r => r.delta > 0 && r.mainCount >= 5).sort((a, b) => b.mainCount - a.mainCount).slice(0, 6), mainIdx, 'podtema', 'fact');
-  const declinePodtema = attachMode(podtemaDyn.filter(r => r.delta < 0 && r.compCount >= 5).sort((a, b) => b.mainCount - a.mainCount).slice(0, 6), mainIdx, 'podtema', 'fact');
+  const growthPodtema = attachExtra(attachMode(podtemaDyn.filter(r => r.delta > 0 && r.mainCount >= 5).sort((a, b) => b.mainCount - a.mainCount).slice(0, 6), mainIdx, 'podtema', 'fact'), mainIdx, 'podtema', 'kurator', 'kuratorLabel');
+  const declinePodtema = attachExtra(attachMode(podtemaDyn.filter(r => r.delta < 0 && r.compCount >= 5).sort((a, b) => b.mainCount - a.mainCount).slice(0, 6), mainIdx, 'podtema', 'fact'), mainIdx, 'podtema', 'kurator', 'kuratorLabel');
 
   const kuratorDyn = isOverall ? attachMode(computeDynList(mainIdx, compIdx, 'kurator').sort((a, b) => b.mainCount - a.mainCount).slice(0, 8), mainIdx, 'kurator', 'fact') : [];
 
@@ -944,7 +963,7 @@ function renderReport(mainIdx, compIdx) {
     ? `${growthPodtema.length ? `наибольший рост — «${escapeHtml(growthPodtema[0].label)}» (${fmtNum(growthPodtema[0].mainCount)}, ${pctText(growthPodtema[0].pct)})` : ''}${growthPodtema.length && declinePodtema.length ? '; ' : ''}${declinePodtema.length ? `наибольшее снижение — «${escapeHtml(declinePodtema[0].label)}» (${fmtNum(declinePodtema[0].mainCount)}, ${pctText(declinePodtema[0].pct)})` : ''}.`
     : 'значимых изменений по подтемам не выявлено.';
   const kuratorConclusion = kuratorDyn.length
-    ? `больше всего обращений у куратора «${escapeHtml(kuratorDyn[0].label)}» — ${fmtNum(kuratorDyn[0].mainCount)} (${total ? Math.round(kuratorDyn[0].mainCount / total * 1000) / 10 : 0}% от общего числа).`
+    ? `больше всего обращений у куратора «${escapeHtml(kuratorDyn[0].label)}» — ${fmtNum(kuratorDyn[0].mainCount)} (${total ? Math.round(kuratorDyn[0].mainCount / total * 100) : 0}% от общего числа).`
     : '';
   const addrConclusion = addrDyn.length
     ? `больше всего обращений по адресу «${escapeHtml(addrDyn[0].label)}» — ${fmtNum(addrDyn[0].mainCount)}${addrGrowth.length ? `; резче всего вырос адрес «${escapeHtml(addrGrowth[0].label)}» (${pctText(addrGrowth[0].pct)})` : ''}.`
@@ -953,7 +972,7 @@ function renderReport(mainIdx, compIdx) {
     ? `самый активный заявитель — ${escapeHtml(topEmails[0].label)} (${topEmails[0].count} ${pluralRu(topEmails[0].count, ['обращение', 'обращения', 'обращений'])}).`
     : '';
   const razbivkaConclusion = (naprTop.length || istochnikTop.length)
-    ? `основное направление — «${naprTop.length ? escapeHtml(naprTop[0].label) : '—'}»${istochnikTop.length ? `, основной источник — «${escapeHtml(istochnikTop[0].label)}» (${total ? Math.round(istochnikTop[0].count / total * 1000) / 10 : 0}% от общего числа)` : ''}.`
+    ? `основное направление — «${naprTop.length ? escapeHtml(naprTop[0].label) : '—'}»${istochnikTop.length ? `, основной источник — «${escapeHtml(istochnikTop[0].label)}» (${total ? Math.round(istochnikTop[0].count / total * 100) : 0}% от общего числа)` : ''}.`
     : '';
 
   // ---- narrative takeaways ----
@@ -969,7 +988,7 @@ function renderReport(mainIdx, compIdx) {
   }
   if (isOverall && kuratorDyn.length) {
     const k = kuratorDyn[0];
-    const share = total ? Math.round(k.mainCount / total * 1000) / 10 : 0;
+    const share = total ? Math.round(k.mainCount / total * 100) : 0;
     takeaways.push(`Больше всего обращений закреплено за куратором <strong>«${escapeHtml(k.label)}»</strong> — ${fmtNum(k.mainCount)} (${share}% от общего числа).`);
   }
   if (addrGrowth.length) {
@@ -984,8 +1003,8 @@ function renderReport(mainIdx, compIdx) {
     omsu: DATA.omsu, titleMain, scopeTitle, periodTxt, compTxt,
     total, totalComp, dynPct: dyn.pct, dynDelta: dyn.delta, resolvedPct,
     takeaways: takeaways.map(stripHtml),
-    growthPodtema: growthPodtema.map(r => ({ label: r.label, main: r.mainCount, comp: r.compCount, pct: r.pct, mode: r.modeLabel, kw: r.keywordPhrase })),
-    declinePodtema: declinePodtema.map(r => ({ label: r.label, main: r.mainCount, comp: r.compCount, pct: r.pct, mode: r.modeLabel, kw: r.keywordPhrase })),
+    growthPodtema: growthPodtema.map(r => ({ label: r.label, main: r.mainCount, comp: r.compCount, pct: r.pct, mode: r.modeLabel, kw: r.keywordPhrase, kurator: r.kuratorLabel })),
+    declinePodtema: declinePodtema.map(r => ({ label: r.label, main: r.mainCount, comp: r.compCount, pct: r.pct, mode: r.modeLabel, kw: r.keywordPhrase, kurator: r.kuratorLabel })),
     factsTop: factsTop.map(r => ({ label: r.label, main: r.mainCount, comp: r.compCount, pct: r.pct, mode: r.modeLabel, kw: r.keywordPhrase })),
     kuratorDyn: kuratorDyn.map(r => ({ label: r.label, main: r.mainCount, comp: r.compCount, pct: r.pct, mode: r.modeLabel, kw: r.keywordPhrase })),
     addrDyn: addrDyn.map(r => ({ label: r.label, main: r.mainCount, comp: r.compCount, pct: r.pct, mode: r.modeLabel, kw: r.keywordPhrase })),
@@ -1024,12 +1043,12 @@ function renderReport(mainIdx, compIdx) {
       <h2>Структура документа</h2>
       <div class="r-toc-grid">
         <div class="r-toc-item"><span class="r-toc-num">01</span><span>Ключевые выводы</span></div>
-        <div class="r-toc-item"><span class="r-toc-num">02</span><span>Общая динамика обращений</span></div>
-        <div class="r-toc-item"><span class="r-toc-num">03</span><span>Подтемы с наибольшим приростом и снижением</span></div>
-        ${isOverall ? `<div class="r-toc-item"><span class="r-toc-num">04</span><span>Рейтинг кураторов по объёму</span></div>` : ''}
-        <div class="r-toc-item"><span class="r-toc-num">05</span><span>Адреса — объём и точки роста</span></div>
-        <div class="r-toc-item"><span class="r-toc-num">06</span><span>Активные заявители</span></div>
-        <div class="r-toc-item"><span class="r-toc-num">07</span><span>Направления, источники, тип сообщения</span></div>
+        <div class="r-toc-item"><span class="r-toc-num">02</span><span>Направления, источники, тип сообщения</span></div>
+        <div class="r-toc-item"><span class="r-toc-num">03</span><span>Общая динамика обращений</span></div>
+        <div class="r-toc-item"><span class="r-toc-num">04</span><span>Подтемы с наибольшим приростом и снижением</span></div>
+        ${isOverall ? `<div class="r-toc-item"><span class="r-toc-num">05</span><span>Рейтинг кураторов по объёму</span></div>` : ''}
+        <div class="r-toc-item"><span class="r-toc-num">06</span><span>Адреса — объём и точки роста</span></div>
+        <div class="r-toc-item"><span class="r-toc-num">07</span><span>Активные заявители</span></div>
         <div class="r-toc-item"><span class="r-toc-num">08</span><span>Итоговая сводка</span></div>
       </div>
     </div>
@@ -1042,7 +1061,22 @@ function renderReport(mainIdx, compIdx) {
     </div>
 
     <div class="r-block">
-      <div class="r-tag"><span class="n">02</span> Общая динамика</div>
+      <div class="r-tag"><span class="n">02</span> Разбивка</div>
+      <h2>Направления, источники, тип сообщения</h2>
+      <p class="r-desc">${naprTop.length ? `Больше всего обращений приходится на направление «${escapeHtml(naprTop[0].label)}»${istochnikTop.length ? `, основной канал поступления — «${escapeHtml(istochnikTop[0].label)}»` : ''}.` : ''}</p>
+      <h3>По источникам</h3>
+      <div class="r-grid2">
+        <div>${sourceStatusTableHtml(mainIdx, compIdx)}</div>
+        <div>${svgPieChart(istochnikTop, 180)}</div>
+      </div>
+      <h3>Направления <span class="n">клик — раскрыть синт.группы и подтемы</span></h3>
+      <div id="report-napr-drill"></div>
+      <h3>Тип сообщения</h3>${barTableHtml(mainIdx, compIdx, 'tip')}
+      ${blockConclusion(razbivkaConclusion)}
+    </div>
+
+    <div class="r-block">
+      <div class="r-tag"><span class="n">03</span> Общая динамика</div>
       <h2>${fmtNum(total)} ${pluralRu(total, ['обращение', 'обращения', 'обращений'])}</h2>
       <p class="r-desc">Сопоставление объёма и ключевых счётчиков за основной период и период сравнения.</p>
       <div class="r-stat-grid">
@@ -1070,7 +1104,7 @@ function renderReport(mainIdx, compIdx) {
     </div>
 
     <div class="r-block">
-      <div class="r-tag"><span class="n">03</span> Подтемы · рост и снижение</div>
+      <div class="r-tag"><span class="n">04</span> Подтемы · рост и снижение</div>
       <h2>Где хуже, а где лучше</h2>
       <p class="r-desc">${growthFactPhrase ? `Внутри растущих подтем чаще всего встречаются жалобы на ${growthFactPhrase}.` : 'Подтемы с наибольшим приростом и наибольшим снижением относительно периода сравнения.'}</p>
       <div class="r-grid2">
@@ -1084,7 +1118,7 @@ function renderReport(mainIdx, compIdx) {
 
     ${isOverall ? `
     <div class="r-block">
-      <div class="r-tag"><span class="n">04</span> Кураторы</div>
+      <div class="r-tag"><span class="n">05</span> Кураторы</div>
       <h2>Рейтинг кураторов по объёму</h2>
       <p class="r-desc">${kuratorThemePhrase ? `У куратора-лидера чаще всего жители жалуются на ${kuratorThemePhrase}.` : 'Кураторы с наибольшим объёмом обращений за основной период.'}</p>
       ${dynTableHtml(kuratorDyn, 'Куратор', { modeLabel: 'Чаще всего жалуются' })}
@@ -1092,7 +1126,7 @@ function renderReport(mainIdx, compIdx) {
     </div>` : ''}
 
     <div class="r-block">
-      <div class="r-tag"><span class="n">05</span> Адреса</div>
+      <div class="r-tag"><span class="n">06</span> Адреса</div>
       <h2>Адреса — объём и точки роста</h2>
       <p class="r-desc">${addrThemePhrase ? `По адресам-лидерам чаще всего фигурируют жалобы на ${addrThemePhrase}. Справа — адреса с резким приростом обращений, потенциальные новые проблемные точки.` : 'Адреса с наибольшим числом обращений и наибольшим приростом.'}</p>
       <div class="r-grid2">
@@ -1103,7 +1137,7 @@ function renderReport(mainIdx, compIdx) {
     </div>
 
     <div class="r-block">
-      <div class="r-tag"><span class="n">06</span> Заявители</div>
+      <div class="r-tag"><span class="n">07</span> Заявители</div>
       <h2>Активные заявители</h2>
       <p class="r-desc">${emailThemePhrase ? `Чаще всего активные заявители пишут по теме ${emailThemePhrase}.` : 'Топ-10 заявителей по количеству обращений за основной период.'}</p>
       <div class="r-cards-grid">
@@ -1113,20 +1147,6 @@ function renderReport(mainIdx, compIdx) {
         </div>
       </div>
       ${blockConclusion(emailConclusion)}
-    </div>
-
-    <div class="r-block">
-      <div class="r-tag"><span class="n">07</span> Разбивка</div>
-      <h2>Направления, источники, тип сообщения</h2>
-      <p class="r-desc">${naprTop.length ? `Больше всего обращений приходится на направление «${escapeHtml(naprTop[0].label)}»${istochnikTop.length ? `, основной канал поступления — «${escapeHtml(istochnikTop[0].label)}»` : ''}.` : ''}</p>
-      <h3>По источникам</h3>
-      <div class="r-grid2">
-        <div>${sourceStatusTableHtml(mainIdx, compIdx)}</div>
-        <div>${svgPieChart(istochnikTop, 180)}</div>
-      </div>
-      <h3>Направления</h3>${barTableHtml(naprTop)}
-      <h3>Тип сообщения</h3>${barTableHtml(tipTop)}
-      ${blockConclusion(razbivkaConclusion)}
     </div>
 
     <div class="r-block">
@@ -1144,6 +1164,8 @@ function renderReport(mainIdx, compIdx) {
   </div>`;
 
   root.innerHTML = html;
+  const naprDrillEl = document.getElementById('report-napr-drill');
+  if (naprDrillEl) initDrillTable(naprDrillEl, mainIdx, compIdx, 'napr', 'Направление', 'sint', 'Синт.группа');
   const printBtn = document.getElementById('r-print-btn');
   if (printBtn) printBtn.addEventListener('click', () => window.print());
   window.__lastReportModel = reportModel;
@@ -1151,13 +1173,59 @@ function renderReport(mainIdx, compIdx) {
   if (pptxBtn) pptxBtn.addEventListener('click', () => exportReportPptx(reportModel));
 }
 
-function barTableHtml(rows) {
+function barTableHtml(mainIdx, compIdx, colName) {
+  const rows = computeDynList(mainIdx, compIdx, colName).sort((a, b) => b.mainCount - a.mainCount).slice(0, 8);
   if (!rows.length) return `<div class="empty-note">Нет данных</div>`;
-  const max = rows[0].count;
   return `<div class="r-table-wrap"><table>
-    <thead><tr><th>Значение</th><th style="width:90px">Кол-во</th><th style="width:80px">Доля</th></tr></thead>
-    <tbody>${rows.map(o => `<tr><td>${escapeHtml(o.label)}</td><td class="r-num">${fmtNum(o.count)}</td><td class="r-num">${Math.round(o.count / max * 100)}%</td></tr>`).join('')}</tbody>
+    <thead><tr><th>Значение</th><th style="width:90px">Кол-во</th><th style="width:100px">Динамика</th></tr></thead>
+    <tbody>${rows.map(r => `<tr><td>${escapeHtml(r.label)}</td><td class="r-num">${fmtNum(r.mainCount)}</td><td class="r-delta ${r.delta >= 0 ? 'bad' : 'good'}">${pctText(r.pct)}</td></tr>`).join('')}</tbody>
   </table></div>`;
+}
+
+// Expandable table: click a row to drill into the next dimension (e.g. Направление -> Синт.группа -> Подтема).
+// Operates directly on a DOM container so each level's filtered row-set stays a plain closure variable — no
+// need for global lookup tables or unique ids.
+function initDrillTable(container, mainIdx, compIdx, colName, valueLabel, nextColName, nextLabel) {
+  const rows = computeDynList(mainIdx, compIdx, colName).sort((a, b) => b.mainCount - a.mainCount).slice(0, 8);
+  if (!rows.length) { container.innerHTML = `<div class="empty-note">Нет данных</div>`; return; }
+  container.innerHTML = `<div class="r-table-wrap"><table>
+    <thead><tr><th>${escapeHtml(valueLabel)}</th><th style="width:90px">Кол-во</th><th style="width:100px">Динамика</th></tr></thead>
+    <tbody>${rows.map((r) => `<tr class="r-exp-row"><td><span class="r-exp-arrow">▸</span> ${escapeHtml(r.label)}</td><td class="r-num">${fmtNum(r.mainCount)}</td><td class="r-delta ${r.delta >= 0 ? 'bad' : 'good'}">${pctText(r.pct)}</td></tr>`).join('')}</tbody>
+  </table></div>`;
+  const trs = [...container.querySelectorAll('.r-exp-row')];
+  trs.forEach((tr, i) => {
+    const r = rows[i];
+    const subMain = mainIdx.filter(j => DATA.cols[colName][j] === r.key);
+    const subComp = compIdx.filter(j => DATA.cols[colName][j] === r.key);
+    tr.style.cursor = 'pointer';
+    tr.addEventListener('click', () => {
+      const next = tr.nextElementSibling;
+      if (next && next.classList.contains('r-exp-panel-row')) {
+        next.remove(); tr.classList.remove('open');
+        const arrow = tr.querySelector('.r-exp-arrow'); if (arrow) arrow.textContent = '▸';
+        return;
+      }
+      container.querySelectorAll('.r-exp-panel-row').forEach(p => p.remove());
+      container.querySelectorAll('.r-exp-row.open').forEach(o => {
+        o.classList.remove('open');
+        const a = o.querySelector('.r-exp-arrow'); if (a) a.textContent = '▸';
+      });
+      tr.classList.add('open');
+      const arrow = tr.querySelector('.r-exp-arrow'); if (arrow) arrow.textContent = '▾';
+      const panelRow = document.createElement('tr');
+      panelRow.className = 'r-exp-panel-row';
+      const td = document.createElement('td');
+      td.colSpan = 3;
+      td.className = 'r-exp-panel-cell';
+      panelRow.appendChild(td);
+      tr.insertAdjacentElement('afterend', panelRow);
+      if (nextColName) {
+        initDrillTable(td, subMain, subComp, nextColName, nextLabel, nextColName === 'sint' ? 'podtema' : null, nextColName === 'sint' ? 'Подтема' : null);
+      } else {
+        td.innerHTML = '<div class="empty-note">Нет вложенных данных</div>';
+      }
+    });
+  });
 }
 
 const PIE_COLORS = ['#4f8cff', '#38bdf8', '#22c55e', '#f5b942', '#a78bfa', '#f5455c', '#fb923c', '#94a3b8', '#2dd4bf', '#f472b6'];
@@ -1208,7 +1276,7 @@ function sourceStatusTableHtml(mainIdx, compIdx) {
     }
     r.resolved = resolved;
     r.inWork = total - resolved;
-    r.resolvedPct = total ? Math.round(resolved / total * 1000) / 10 : 0;
+    r.resolvedPct = total ? Math.round(resolved / total * 100) : 0;
   });
   return `<div class="r-table-wrap"><table>
     <thead><tr><th>Источник</th><th style="width:70px">Кол-во</th><th style="width:78px">Динамика</th><th style="width:70px">В работе</th><th style="width:80px">Отработано</th><th style="width:90px">% отработки</th></tr></thead>
@@ -1305,17 +1373,18 @@ function pptxRankTableXml(id, rows, colLabel) {
   const header = { h: 340000, cells: [
     { lines: [[{ text: '№', size: 1000, bold: true, color: 'FFFFFF' }]], fill: PPTX_NAVY, align: 'ctr' },
     { lines: [[{ text: colLabel, size: 1000, bold: true, color: 'FFFFFF' }]], fill: PPTX_NAVY },
-    { lines: [[{ text: 'Сравнение', size: 1000, bold: true, color: 'FFFFFF' }]], fill: PPTX_NAVY, align: 'ctr' },
-    { lines: [[{ text: 'Основной', size: 1000, bold: true, color: 'FFFFFF' }]], fill: PPTX_NAVY, align: 'ctr' },
+    { lines: [[{ text: 'Прошлый период', size: 900, bold: true, color: 'FFFFFF' }]], fill: PPTX_NAVY, align: 'ctr' },
+    { lines: [[{ text: 'Текущий период', size: 900, bold: true, color: 'FFFFFF' }]], fill: PPTX_NAVY, align: 'ctr' },
     { lines: [[{ text: 'Динамика', size: 1000, bold: true, color: 'FFFFFF' }]], fill: PPTX_NAVY, align: 'ctr' },
   ] };
   const dataRows = rows.map((r, i) => {
     const isCrit = r.pct >= 30, isGood = r.pct <= -20;
     const fill = isCrit ? PPTX_BAD_BG : (isGood ? PPTX_GOOD_BG : (i % 2 ? PPTX_ALT_BG : 'FFFFFF'));
     const labelLines = [[{ text: r.label, size: 1100 }]];
+    if (r.kurator) labelLines.push([{ text: `Куратор: ${r.kurator}`, size: 850, bold: true, color: PPTX_NAVY }]);
     if (r.mode) labelLines.push([{ text: `Чаще всего жалуются: «${r.mode}»`, size: 850, italic: true, color: PPTX_SUBTLE }]);
     if (r.kw) labelLines.push([{ text: `Частые слова: ${r.kw}`, size: 850, italic: true, color: '1456A8' }]);
-    return { h: 340000 + (r.mode ? 220000 : 0) + (r.kw ? 220000 : 0), cells: [
+    return { h: 340000 + (r.kurator ? 220000 : 0) + (r.mode ? 220000 : 0) + (r.kw ? 220000 : 0), cells: [
       { lines: [[{ text: String(i + 1).padStart(2, '0'), size: 1050 }]], fill, align: 'ctr' },
       { lines: labelLines, fill, anchor: 't' },
       { lines: [[{ text: fmtNum(r.comp), size: 1050 }]], fill, align: 'ctr' },
@@ -1354,7 +1423,7 @@ function pptxEmailTableXml(id, rows) {
     if (r.mode) lines.push([{ text: `Чаще всего жалуется: «${r.mode}»`, size: 850, italic: true, color: PPTX_SUBTLE }]);
     if (r.kw) lines.push([{ text: `Частые слова: ${r.kw}`, size: 850, italic: true, color: '1456A8' }]);
     const fill = i % 2 ? PPTX_ALT_BG : 'FFFFFF';
-    return { h: 340000 + (r.mode ? 220000 : 0) + (r.kw ? 220000 : 0), cells: [
+    return { h: 340000 + (r.kurator ? 220000 : 0) + (r.mode ? 220000 : 0) + (r.kw ? 220000 : 0), cells: [
       { lines: [[{ text: String(i + 1).padStart(2, '0'), size: 1050 }]], fill, align: 'ctr' },
       { lines, fill, anchor: 't' },
       { lines: [[{ text: fmtNum(r.count), size: 1050, bold: true }]], fill, align: 'ctr' },
