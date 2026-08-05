@@ -679,6 +679,7 @@ function pluralRu(n, forms) {
   return forms[2];
 }
 function pctText(pct) { return `${pct > 0 ? '+' : ''}${pct}%`; }
+function deltaPctText(delta, pct) { return `${delta > 0 ? '+' : ''}${fmtNum(delta)} (${pctText(pct)})`; }
 
 // Per-key dynamics list (main vs comparison count) for a given column — the base data for every ranking table.
 function computeDynList(mainIdx, compIdx, colName, opts) {
@@ -773,14 +774,14 @@ function dynTableHtml(rows, colLabel, opts) {
   opts = opts || {};
   if (!rows.length) return `<div class="empty-note">Нет данных</div>`;
   return `<div class="r-table-wrap"><table>
-    <thead><tr><th style="width:28px">№</th><th>${escapeHtml(colLabel)}</th><th style="width:100px">Прошлый период</th><th style="width:100px">Текущий период</th><th style="width:78px">Динамика</th></tr></thead>
+    <thead><tr><th style="width:28px">№</th><th>${escapeHtml(colLabel)}</th><th style="width:90px">Прошлый период</th><th style="width:90px">Текущий период</th><th style="width:120px">Динамика</th></tr></thead>
     <tbody>${rows.map((r, i) => `
       <tr class="${reportRowClass(r.pct)}">
         <td class="r-rank">${String(i + 1).padStart(2, '0')}</td>
         <td>${escapeHtml(r.label)}${r.delta >= 0 ? growthBadgeHtml(r.pct) : declineBadgeHtml(r.pct)}${r.kuratorLabel ? `<div class="r-sub r-sub-kurator">Куратор: ${escapeHtml(r.kuratorLabel)}</div>` : ''}${r.modeLabel ? `<div class="r-sub">${escapeHtml(opts.modeLabel || 'Чаще всего жалуются')}: «${escapeHtml(r.modeLabel)}»</div>` : ''}${r.keywordPhrase ? `<div class="r-sub r-sub-kw">Частые слова в обращениях: ${escapeHtml(r.keywordPhrase)}</div>` : ''}</td>
         <td class="r-num">${fmtNum(r.compCount)}</td>
         <td class="r-num">${fmtNum(r.mainCount)}</td>
-        <td class="r-delta ${r.delta >= 0 ? 'bad' : 'good'}">${pctText(r.pct)}</td>
+        <td class="r-delta ${r.delta >= 0 ? 'bad' : 'good'}">${deltaPctText(r.delta, r.pct)}</td>
       </tr>`).join('')}</tbody>
   </table></div>`;
 }
@@ -1033,7 +1034,7 @@ function renderReport(mainIdx, compIdx) {
       </div>
       <div class="r-header-stats">
         <div><div class="r-hstat-label">Всего обращений</div><div class="r-hstat-value">${fmtNum(total)}</div></div>
-        <div><div class="r-hstat-label">Динамика</div><div class="r-hstat-value">${pctText(dyn.pct)}</div></div>
+        <div><div class="r-hstat-label">Динамика</div><div class="r-hstat-value">${deltaPctText(dyn.delta, dyn.pct)}</div></div>
         <div><div class="r-hstat-label">Решено</div><div class="r-hstat-value">${resolvedPct}%</div></div>
       </div>
     </header>
@@ -1044,12 +1045,11 @@ function renderReport(mainIdx, compIdx) {
       <div class="r-toc-grid">
         <div class="r-toc-item"><span class="r-toc-num">01</span><span>Ключевые выводы</span></div>
         <div class="r-toc-item"><span class="r-toc-num">02</span><span>Направления, источники, тип сообщения</span></div>
-        <div class="r-toc-item"><span class="r-toc-num">03</span><span>Общая динамика обращений</span></div>
-        <div class="r-toc-item"><span class="r-toc-num">04</span><span>Подтемы с наибольшим приростом и снижением</span></div>
-        ${isOverall ? `<div class="r-toc-item"><span class="r-toc-num">05</span><span>Рейтинг кураторов по объёму</span></div>` : ''}
-        <div class="r-toc-item"><span class="r-toc-num">06</span><span>Адреса — объём и точки роста</span></div>
-        <div class="r-toc-item"><span class="r-toc-num">07</span><span>Активные заявители</span></div>
-        <div class="r-toc-item"><span class="r-toc-num">08</span><span>Итоговая сводка</span></div>
+        <div class="r-toc-item"><span class="r-toc-num">03</span><span>Подтемы с наибольшим приростом и снижением</span></div>
+        ${isOverall ? `<div class="r-toc-item"><span class="r-toc-num">04</span><span>Рейтинг кураторов по объёму</span></div>` : ''}
+        <div class="r-toc-item"><span class="r-toc-num">05</span><span>Адреса — объём и точки роста</span></div>
+        <div class="r-toc-item"><span class="r-toc-num">06</span><span>Активные заявители</span></div>
+        <div class="r-toc-item"><span class="r-toc-num">07</span><span>Итоговая сводка</span></div>
       </div>
     </div>
 
@@ -1076,35 +1076,7 @@ function renderReport(mainIdx, compIdx) {
     </div>
 
     <div class="r-block">
-      <div class="r-tag"><span class="n">03</span> Общая динамика</div>
-      <h2>${fmtNum(total)} ${pluralRu(total, ['обращение', 'обращения', 'обращений'])}</h2>
-      <p class="r-desc">Сопоставление объёма и ключевых счётчиков за основной период и период сравнения.</p>
-      <div class="r-stat-grid">
-        <div class="r-stat-card ${dyn.delta >= 0 ? 'bad' : 'good'}">
-          <div class="r-stat-label">Всего обращений</div>
-          <div class="r-stat-value">${fmtNum(total)}</div>
-          <div class="r-stat-compare">Сравнение: ${fmtNum(totalComp)} · <span class="${dyn.delta >= 0 ? 'r-pct-bad' : 'r-pct-good'}" style="padding:0;background:none;border:none;">${pctText(dyn.pct)}</span></div>
-        </div>
-        <div class="r-stat-card">
-          <div class="r-stat-label">Решено</div>
-          <div class="r-stat-value">${resolvedPct}%</div>
-          <div class="r-stat-compare">${fmtNum(resolved)} из ${fmtNum(total)}</div>
-        </div>
-        <div class="r-stat-card">
-          <div class="r-stat-label">Кураторов</div>
-          <div class="r-stat-value">${distinctCount(mainIdx, 'kurator')}</div>
-          <div class="r-stat-compare">задействовано за период</div>
-        </div>
-        <div class="r-stat-card">
-          <div class="r-stat-label">Адресов с улицей</div>
-          <div class="r-stat-value">${distinctCount(mainAddr, 'addr')}</div>
-          <div class="r-stat-compare">уникальных за период</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="r-block">
-      <div class="r-tag"><span class="n">04</span> Подтемы · рост и снижение</div>
+      <div class="r-tag"><span class="n">03</span> Подтемы · рост и снижение</div>
       <h2>Где хуже, а где лучше</h2>
       <p class="r-desc">${growthFactPhrase ? `Внутри растущих подтем чаще всего встречаются жалобы на ${growthFactPhrase}.` : 'Подтемы с наибольшим приростом и наибольшим снижением относительно периода сравнения.'}</p>
       <div class="r-grid2">
@@ -1118,7 +1090,7 @@ function renderReport(mainIdx, compIdx) {
 
     ${isOverall ? `
     <div class="r-block">
-      <div class="r-tag"><span class="n">05</span> Кураторы</div>
+      <div class="r-tag"><span class="n">04</span> Кураторы</div>
       <h2>Рейтинг кураторов по объёму</h2>
       <p class="r-desc">${kuratorThemePhrase ? `У куратора-лидера чаще всего жители жалуются на ${kuratorThemePhrase}.` : 'Кураторы с наибольшим объёмом обращений за основной период.'}</p>
       ${dynTableHtml(kuratorDyn, 'Куратор', { modeLabel: 'Чаще всего жалуются' })}
@@ -1126,7 +1098,7 @@ function renderReport(mainIdx, compIdx) {
     </div>` : ''}
 
     <div class="r-block">
-      <div class="r-tag"><span class="n">06</span> Адреса</div>
+      <div class="r-tag"><span class="n">05</span> Адреса</div>
       <h2>Адреса — объём и точки роста</h2>
       <p class="r-desc">${addrThemePhrase ? `По адресам-лидерам чаще всего фигурируют жалобы на ${addrThemePhrase}. Справа — адреса с резким приростом обращений, потенциальные новые проблемные точки.` : 'Адреса с наибольшим числом обращений и наибольшим приростом.'}</p>
       <div class="r-grid2">
@@ -1137,7 +1109,7 @@ function renderReport(mainIdx, compIdx) {
     </div>
 
     <div class="r-block">
-      <div class="r-tag"><span class="n">07</span> Заявители</div>
+      <div class="r-tag"><span class="n">06</span> Заявители</div>
       <h2>Активные заявители</h2>
       <p class="r-desc">${emailThemePhrase ? `Чаще всего активные заявители пишут по теме ${emailThemePhrase}.` : 'Топ-10 заявителей по количеству обращений за основной период.'}</p>
       <div class="r-cards-grid">
@@ -1150,7 +1122,7 @@ function renderReport(mainIdx, compIdx) {
     </div>
 
     <div class="r-block">
-      <div class="r-tag"><span class="n">08</span> Итог</div>
+      <div class="r-tag"><span class="n">07</span> Итог</div>
       <h2>Итоговая сводка</h2>
       <p class="r-desc">Все выводы по разделам справки — в одном месте, по срезу «${escapeHtml(scopeTitle)}» за ${periodTxt}.</p>
       <div class="r-callout ${dyn.delta >= 0 ? 'bad' : ''}">
@@ -1177,8 +1149,8 @@ function barTableHtml(mainIdx, compIdx, colName) {
   const rows = computeDynList(mainIdx, compIdx, colName).sort((a, b) => b.mainCount - a.mainCount).slice(0, 8);
   if (!rows.length) return `<div class="empty-note">Нет данных</div>`;
   return `<div class="r-table-wrap"><table>
-    <thead><tr><th>Значение</th><th style="width:90px">Кол-во</th><th style="width:100px">Динамика</th></tr></thead>
-    <tbody>${rows.map(r => `<tr><td>${escapeHtml(r.label)}</td><td class="r-num">${fmtNum(r.mainCount)}</td><td class="r-delta ${r.delta >= 0 ? 'bad' : 'good'}">${pctText(r.pct)}</td></tr>`).join('')}</tbody>
+    <thead><tr><th>Значение</th><th style="width:90px">Кол-во</th><th style="width:110px">Динамика</th></tr></thead>
+    <tbody>${rows.map(r => `<tr><td>${escapeHtml(r.label)}</td><td class="r-num">${fmtNum(r.mainCount)}</td><td class="r-delta ${r.delta >= 0 ? 'bad' : 'good'}">${deltaPctText(r.delta, r.pct)}</td></tr>`).join('')}</tbody>
   </table></div>`;
 }
 
@@ -1189,8 +1161,8 @@ function initDrillTable(container, mainIdx, compIdx, colName, valueLabel, nextCo
   const rows = computeDynList(mainIdx, compIdx, colName).sort((a, b) => b.mainCount - a.mainCount).slice(0, 8);
   if (!rows.length) { container.innerHTML = `<div class="empty-note">Нет данных</div>`; return; }
   container.innerHTML = `<div class="r-table-wrap"><table>
-    <thead><tr><th>${escapeHtml(valueLabel)}</th><th style="width:90px">Кол-во</th><th style="width:100px">Динамика</th></tr></thead>
-    <tbody>${rows.map((r) => `<tr class="r-exp-row"><td><span class="r-exp-arrow">▸</span> ${escapeHtml(r.label)}</td><td class="r-num">${fmtNum(r.mainCount)}</td><td class="r-delta ${r.delta >= 0 ? 'bad' : 'good'}">${pctText(r.pct)}</td></tr>`).join('')}</tbody>
+    <thead><tr><th>${escapeHtml(valueLabel)}</th><th style="width:90px">Кол-во</th><th style="width:110px">Динамика</th></tr></thead>
+    <tbody>${rows.map((r) => `<tr class="r-exp-row"><td><span class="r-exp-arrow">▸</span> ${escapeHtml(r.label)}</td><td class="r-num">${fmtNum(r.mainCount)}</td><td class="r-delta ${r.delta >= 0 ? 'bad' : 'good'}">${deltaPctText(r.delta, r.pct)}</td></tr>`).join('')}</tbody>
   </table></div>`;
   const trs = [...container.querySelectorAll('.r-exp-row')];
   trs.forEach((tr, i) => {
@@ -1279,11 +1251,11 @@ function sourceStatusTableHtml(mainIdx, compIdx) {
     r.resolvedPct = total ? Math.round(resolved / total * 100) : 0;
   });
   return `<div class="r-table-wrap"><table>
-    <thead><tr><th>Источник</th><th style="width:70px">Кол-во</th><th style="width:78px">Динамика</th><th style="width:70px">В работе</th><th style="width:80px">Отработано</th><th style="width:90px">% отработки</th></tr></thead>
+    <thead><tr><th>Источник</th><th style="width:70px">Кол-во</th><th style="width:110px">Динамика</th><th style="width:70px">В работе</th><th style="width:80px">Отработано</th><th style="width:90px">% отработки</th></tr></thead>
     <tbody>${rows.map(r => `<tr>
       <td>${escapeHtml(r.label)}</td>
       <td class="r-num">${fmtNum(r.mainCount)}</td>
-      <td class="r-delta ${r.delta >= 0 ? 'bad' : 'good'}">${pctText(r.pct)}</td>
+      <td class="r-delta ${r.delta >= 0 ? 'bad' : 'good'}">${deltaPctText(r.delta, r.pct)}</td>
       <td class="r-num">${fmtNum(r.inWork)}</td>
       <td class="r-num">${fmtNum(r.resolved)}</td>
       <td class="r-num">${r.resolvedPct}%</td>
@@ -1389,7 +1361,7 @@ function pptxRankTableXml(id, rows, colLabel) {
       { lines: labelLines, fill, anchor: 't' },
       { lines: [[{ text: fmtNum(r.comp), size: 1050 }]], fill, align: 'ctr' },
       { lines: [[{ text: fmtNum(r.main), size: 1050, bold: true }]], fill, align: 'ctr' },
-      { lines: [[{ text: pctText(r.pct), size: 1050, bold: true, color: r.delta >= 0 ? PPTX_BAD : PPTX_GOOD }]], fill, align: 'ctr' },
+      { lines: [[{ text: deltaPctText(r.delta, r.pct), size: 950, bold: true, color: r.delta >= 0 ? PPTX_BAD : PPTX_GOOD }]], fill, align: 'ctr' },
     ] };
   });
   return pptxTableGraphicFrame(id, x, y, cx, w, [header, ...dataRows]);
@@ -1441,7 +1413,7 @@ function buildReportSlides(m) {
       pptxBulletXml(`Период: ${m.periodTxt}`, { noBullet: true, sz: 1600 }),
       pptxBulletXml(`Сравнение: ${m.compTxt}`, { noBullet: true, sz: 1600 }),
       pptxBulletXml(`Срез: ${m.scopeTitle}`, { noBullet: true, sz: 1600 }),
-      pptxBulletXml(`Всего обращений: ${fmtNum(m.total)} (${pctText(m.dynPct)} к сравнению)`, { noBullet: true, sz: 1600, bold: true }),
+      pptxBulletXml(`Всего обращений: ${fmtNum(m.total)} (${deltaPctText(m.dynDelta, m.dynPct)} к сравнению)`, { noBullet: true, sz: 1600, bold: true }),
       pptxBulletXml(`Решено: ${m.resolvedPct}%`, { noBullet: true, sz: 1600 }),
     ].join(''),
   });

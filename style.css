@@ -353,7 +353,7 @@ canvas{max-width:100%;}
   font-family:'JetBrains Mono',monospace; font-size:11.5px; color:#a8c8ed; letter-spacing:.1em;
   text-transform:uppercase; margin-bottom:5px; font-weight:600;
 }
-.report-scope .r-hstat-value{font-family:'Bebas Neue',sans-serif; font-size:32px; color:#fff; line-height:1;}
+.report-scope .r-hstat-value{font-family:'Bebas Neue',sans-serif; font-size:26px; color:#fff; line-height:1.1;}
 
 .report-scope .r-tag{
   display:inline-flex; align-items:center; gap:10px; background:var(--r-blue-700); color:#fff;
