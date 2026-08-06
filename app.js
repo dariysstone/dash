@@ -1284,17 +1284,32 @@ function buildExportRows(idxArr) {
 
 // "Описание" is deliberately NOT part of the main data.json (it would balloon it ~5x and slow down
 // every page load) — it lives in a separate file, fetched only when the user actually exports.
+// Where to load the (large, ~40MB) description data from. Defaults to same-origin — works
+// out of the box if data_opis.js sits next to index.html. If you instead host it elsewhere
+// (e.g. a GitHub Release asset, since GitHub caps browser-uploaded repo files at 25MB but
+// Release assets can be much bigger), just change this to the full URL.
+const OPIS_JS_URL = 'data_opis.js';
+
 async function ensureOpisLoaded() {
   if (Array.isArray(DATA.cols.opis)) return true;
-  try {
-    const r = await fetch('data_opis.json?t=' + Date.now(), { cache: 'no-store' });
-    if (!r.ok) return false;
-    const d = await r.json();
-    DATA.cols.opis = d.opis;
+  if (window.__OPIS_DATA__ && Array.isArray(window.__OPIS_DATA__.opis)) {
+    DATA.cols.opis = window.__OPIS_DATA__.opis;
     return true;
-  } catch (e) {
-    return false;
   }
+  return new Promise(resolve => {
+    const script = document.createElement('script');
+    script.src = OPIS_JS_URL + (OPIS_JS_URL.includes('?') ? '&' : '?') + 't=' + Date.now();
+    script.onload = () => {
+      if (window.__OPIS_DATA__ && Array.isArray(window.__OPIS_DATA__.opis)) {
+        DATA.cols.opis = window.__OPIS_DATA__.opis;
+        resolve(true);
+      } else {
+        resolve(false);
+      }
+    };
+    script.onerror = () => resolve(false);
+    document.head.appendChild(script);
+  });
 }
 
 /* ================= Report -> PPTX export (hand-built minimal OOXML via JSZip) ================= */
