@@ -724,7 +724,7 @@ function keywordPhraseFor(idxArr, topN) {
   }
   return [...kwCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, topN || 4).map(([id]) => DATA.dicts.keyword[id]).join(', ');
 }
-function attachMode(rows, idxArr, colName, modeCol) {
+function attachMode(rows, idxArr, colName, modeCol, modeFilterFn) {
   const col = DATA.cols[colName];
   const col2 = DATA.cols[modeCol];
   const dict2 = DATA.dicts[modeCol];
@@ -734,6 +734,7 @@ function attachMode(rows, idxArr, colName, modeCol) {
     for (const i of idxArr) {
       if (col[i] !== r.key) continue;
       matchIdx.push(i);
+      if (modeFilterFn && !modeFilterFn(i)) continue;
       const v2 = col2[i];
       modeCounts.set(v2, (modeCounts.get(v2) || 0) + 1);
     }
@@ -941,7 +942,7 @@ function renderReport(mainIdx, compIdx) {
 
   const topEmails = topWithMode(mainIdx, 'email', 'fact', 10, { excludeNull: true });
 
-  const factsTop = attachMode(computeDynList(mainIdx, compIdx, 'fact').sort((a, b) => b.mainCount - a.mainCount).slice(0, 8), mainIdx, 'fact', 'addr');
+  const factsTop = attachMode(computeDynList(mainIdx, compIdx, 'fact').sort((a, b) => b.mainCount - a.mainCount).slice(0, 8), mainIdx, 'fact', 'addr', i => DATA.cols.ulitsa[i] !== -1);
 
   const naprTop = countBy(mainIdx, 'napr').slice(0, 5);
   const istochnikTop = countBy(mainIdx, 'istochnik').slice(0, 8);
@@ -1039,9 +1040,9 @@ function renderReport(mainIdx, compIdx) {
       <h2>Структура документа</h2>
       <div class="r-toc-grid">
         <div class="r-toc-item"><span class="r-toc-num">01</span><span>Ключевые выводы</span></div>
-        <div class="r-toc-item"><span class="r-toc-num">02</span><span>Направления, источники, тип сообщения</span></div>
-        <div class="r-toc-item"><span class="r-toc-num">03</span><span>Подтемы с наибольшим приростом и снижением</span></div>
-        ${isOverall ? `<div class="r-toc-item"><span class="r-toc-num">04</span><span>Рейтинг кураторов по объёму</span></div>` : ''}
+        ${isOverall ? `<div class="r-toc-item"><span class="r-toc-num">02</span><span>Рейтинг кураторов по объёму</span></div>` : ''}
+        <div class="r-toc-item"><span class="r-toc-num">03</span><span>Направления, источники, тип сообщения</span></div>
+        <div class="r-toc-item"><span class="r-toc-num">04</span><span>Подтемы с наибольшим приростом и снижением</span></div>
         <div class="r-toc-item"><span class="r-toc-num">05</span><span>Адреса — объём и точки роста</span></div>
         <div class="r-toc-item"><span class="r-toc-num">06</span><span>Активные заявители</span></div>
         <div class="r-toc-item"><span class="r-toc-num">07</span><span>Итоговая сводка</span></div>
@@ -1055,8 +1056,17 @@ function renderReport(mainIdx, compIdx) {
       ${takeaways.map((t, i) => `<div class="r-takeaway"><div class="r-takeaway-num">${String(i + 1).padStart(2, '0')}</div><div class="r-takeaway-text">${t}</div></div>`).join('')}
     </div>
 
+    ${isOverall ? `
     <div class="r-block">
-      <div class="r-tag"><span class="n">02</span> Разбивка</div>
+      <div class="r-tag"><span class="n">02</span> Кураторы</div>
+      <h2>Рейтинг кураторов по объёму</h2>
+      <p class="r-desc">${kuratorThemePhrase ? `У куратора-лидера чаще всего жители жалуются на ${kuratorThemePhrase}.` : 'Кураторы с наибольшим объёмом обращений за основной период.'}</p>
+      ${dynTableHtml(kuratorDyn, 'Куратор', { modeLabel: 'Чаще всего жалуются' })}
+      ${blockConclusion(kuratorConclusion)}
+    </div>` : ''}
+
+    <div class="r-block">
+      <div class="r-tag"><span class="n">03</span> Разбивка</div>
       <h2>Направления, источники, тип сообщения</h2>
       <p class="r-desc">${naprTop.length ? `Больше всего обращений приходится на направление «${escapeHtml(naprTop[0].label)}»${istochnikTop.length ? `, основной канал поступления — «${escapeHtml(istochnikTop[0].label)}»` : ''}.` : ''}</p>
       <div class="r-mini-stats">
@@ -1076,7 +1086,7 @@ function renderReport(mainIdx, compIdx) {
     </div>
 
     <div class="r-block">
-      <div class="r-tag"><span class="n">03</span> Подтемы · рост и снижение</div>
+      <div class="r-tag"><span class="n">04</span> Подтемы · рост и снижение</div>
       <h2>Где хуже, а где лучше</h2>
       <p class="r-desc">${growthFactPhrase ? `Внутри растущих подтем чаще всего встречаются жалобы на ${growthFactPhrase}.` : 'Подтемы с наибольшим приростом и наибольшим снижением относительно периода сравнения.'}</p>
       <div class="r-grid2">
@@ -1087,15 +1097,6 @@ function renderReport(mainIdx, compIdx) {
       ${dynTableHtml(factsTop, 'Факт', { modeLabel: 'Адрес' })}
       ${blockConclusion(podtemaConclusion)}
     </div>
-
-    ${isOverall ? `
-    <div class="r-block">
-      <div class="r-tag"><span class="n">04</span> Кураторы</div>
-      <h2>Рейтинг кураторов по объёму</h2>
-      <p class="r-desc">${kuratorThemePhrase ? `У куратора-лидера чаще всего жители жалуются на ${kuratorThemePhrase}.` : 'Кураторы с наибольшим объёмом обращений за основной период.'}</p>
-      ${dynTableHtml(kuratorDyn, 'Куратор', { modeLabel: 'Чаще всего жалуются' })}
-      ${blockConclusion(kuratorConclusion)}
-    </div>` : ''}
 
     <div class="r-block">
       <div class="r-tag"><span class="n">05</span> Адреса</div>
@@ -1265,9 +1266,10 @@ function sourceStatusTableHtml(mainIdx, compIdx) {
 
 
 function buildExportRows(idxArr) {
-  const cols = ['ecur', 'numsrc', 'date', 'napr', 'sint', 'fact', 'podtema', 'status', 'kurator', 'ispolnitel', 'tip', 'istochnik', 'uk', 'addr', 'naspunkt', 'rayon', 'email', 'spam', 'overdue', 'hasRepeats', 'repeats', 'hasDelay', 'delayCount'];
-  const headers = ['Номер ЕЦУР', 'Номер в источнике', 'Дата', 'Направление', 'Синт.группа', 'Факт', 'Подтема', 'Статус', 'Куратор', 'Исполнитель', 'Тип сообщения', 'Источник', 'УК', 'Адрес', 'Населённый пункт', 'Район', 'Почта заявителя', 'Спам', 'Просрочка', 'Есть повторы', 'Кол-во повторов', 'Есть отложки', 'Кол-во отложенных решений'];
-  const plainCols = new Set(['ecur', 'numsrc', 'repeats', 'delayCount']);
+  const hasOpis = Array.isArray(DATA.cols.opis);
+  const cols = ['ecur', 'numsrc', 'date', 'napr', 'sint', 'fact', 'podtema', 'status', 'kurator', 'ispolnitel', 'tip', 'istochnik', 'uk', 'addr', 'naspunkt', 'rayon', 'email', 'spam', 'overdue', 'hasRepeats', 'repeats', 'hasDelay', 'delayCount'].concat(hasOpis ? ['opis'] : []);
+  const headers = ['Номер ЕЦУР', 'Номер в источнике', 'Дата', 'Направление', 'Синт.группа', 'Факт', 'Подтема', 'Статус', 'Куратор', 'Исполнитель', 'Тип сообщения', 'Источник', 'УК', 'Адрес', 'Населённый пункт', 'Район', 'Почта заявителя', 'Спам', 'Просрочка', 'Есть повторы', 'Кол-во повторов', 'Есть отложки', 'Кол-во отложенных решений'].concat(hasOpis ? ['Описание'] : []);
+  const plainCols = new Set(['ecur', 'numsrc', 'repeats', 'delayCount', 'opis']);
   const rows = [headers];
   for (const i of idxArr) {
     rows.push(cols.map(c => {
@@ -1278,6 +1280,21 @@ function buildExportRows(idxArr) {
     }));
   }
   return rows;
+}
+
+// "Описание" is deliberately NOT part of the main data.json (it would balloon it ~5x and slow down
+// every page load) — it lives in a separate file, fetched only when the user actually exports.
+async function ensureOpisLoaded() {
+  if (Array.isArray(DATA.cols.opis)) return true;
+  try {
+    const r = await fetch('data_opis.json?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) return false;
+    const d = await r.json();
+    DATA.cols.opis = d.opis;
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
 
 /* ================= Report -> PPTX export (hand-built minimal OOXML via JSZip) ================= */
@@ -1419,11 +1436,11 @@ function buildReportSlides(m) {
   });
   // 2. takeaways
   slides.push({ title: 'Ключевые выводы', body: m.takeaways.map(t => pptxBulletXml(t, { sz: 1300 })).join('') });
+  if (m.isOverall && m.kuratorDyn.length) slides.push({ title: 'Рейтинг кураторов по объёму', table: (id) => pptxRankTableXml(id, m.kuratorDyn, 'Куратор') });
   // 3+. ranking tables
   if (m.growthPodtema.length) slides.push({ title: 'Подтемы — наибольший прирост', table: (id) => pptxRankTableXml(id, m.growthPodtema, 'Подтема') });
   if (m.declinePodtema.length) slides.push({ title: 'Подтемы — наибольшее снижение', table: (id) => pptxRankTableXml(id, m.declinePodtema, 'Подтема') });
   if (m.factsTop.length) slides.push({ title: 'Топ фактов', table: (id) => pptxRankTableXml(id, m.factsTop, 'Факт') });
-  if (m.isOverall && m.kuratorDyn.length) slides.push({ title: 'Рейтинг кураторов по объёму', table: (id) => pptxRankTableXml(id, m.kuratorDyn, 'Куратор') });
   if (m.addrDyn.length) slides.push({ title: 'Адреса — по объёму', table: (id) => pptxRankTableXml(id, m.addrDyn, 'Адрес') });
   if (m.addrGrowth.length) slides.push({ title: 'Адреса — резкий прирост', table: (id) => pptxRankTableXml(id, m.addrGrowth, 'Адрес') });
   if (m.topEmails.length) slides.push({ title: 'Активные заявители', table: (id) => pptxEmailTableXml(id, m.topEmails) });
@@ -1516,7 +1533,7 @@ async function exportReportPptx(model) {
   URL.revokeObjectURL(url);
 }
 
-function exportXlsx() {
+async function exportXlsx() {
   const idxArr = window.__lastMainIdx || [];
   const filename = `obrasheniya_${fmtDateRu(dayToISO(state.mainStart))}_${fmtDateRu(dayToISO(state.mainEnd))}.xlsx`;
 
@@ -1524,6 +1541,12 @@ function exportXlsx() {
     alert('Не удалось загрузить библиотеку экспорта (нужен интернет для загрузки xlsx.js). Попробуйте обновить страницу.');
     return;
   }
+
+  const btn = document.getElementById('btnExport');
+  const originalLabel = btn ? btn.textContent : null;
+  if (btn) { btn.textContent = '⏳ Загрузка описаний...'; btn.disabled = true; }
+  await ensureOpisLoaded(); // ok if this fails — export still works, just without the "Описание" column
+  if (btn) { btn.textContent = originalLabel; btn.disabled = false; }
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(buildExportRows(idxArr)), 'Детализация');
