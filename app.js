@@ -1288,7 +1288,7 @@ function buildExportRows(idxArr) {
 // out of the box if data_opis.js sits next to index.html. If you instead host it elsewhere
 // (e.g. a GitHub Release asset, since GitHub caps browser-uploaded repo files at 25MB but
 // Release assets can be much bigger), just change this to the full URL.
-const OPIS_JS_URL = 'data_opis.js';
+const OPIS_JS_URL = 'https://github.com/dariysstone/dash/releases/download/data/data_opis.js';
 
 async function ensureOpisLoaded() {
   if (Array.isArray(DATA.cols.opis)) return true;
