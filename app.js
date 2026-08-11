@@ -1288,11 +1288,22 @@ function buildExportRows(idxArr) {
 // out of the box if data_opis.js sits next to index.html. If you instead host it elsewhere
 // (e.g. a GitHub Release asset, since GitHub caps browser-uploaded repo files at 25MB but
 // Release assets can be much bigger), just change this to the full URL.
-const OPIS_JS_URL = 'https://github.com/dariysstone/dash/releases/download/data/data_opis.js';
+const OPIS_JS_URL = 'data_opis.js';
+
+// Guards against data.json and data_opis.js being out of sync (e.g. one updated, the other
+// forgotten) — in that case row index i means a DIFFERENT обращение in each file, so blindly
+// using it would attach the wrong "Описание" to the wrong row. Safer to skip the column than
+// export wrong data silently.
+function opisMatchesCurrentData(opisPayload) {
+  if (!opisPayload || !Array.isArray(opisPayload.opis)) return false;
+  if (opisPayload.opis.length !== DATA.n) return false;
+  if (DATA.buildId && opisPayload.buildId && opisPayload.buildId !== DATA.buildId) return false;
+  return true;
+}
 
 async function ensureOpisLoaded() {
   if (Array.isArray(DATA.cols.opis)) return true;
-  if (window.__OPIS_DATA__ && Array.isArray(window.__OPIS_DATA__.opis)) {
+  if (opisMatchesCurrentData(window.__OPIS_DATA__)) {
     DATA.cols.opis = window.__OPIS_DATA__.opis;
     return true;
   }
@@ -1300,10 +1311,13 @@ async function ensureOpisLoaded() {
     const script = document.createElement('script');
     script.src = OPIS_JS_URL + (OPIS_JS_URL.includes('?') ? '&' : '?') + 't=' + Date.now();
     script.onload = () => {
-      if (window.__OPIS_DATA__ && Array.isArray(window.__OPIS_DATA__.opis)) {
+      if (opisMatchesCurrentData(window.__OPIS_DATA__)) {
         DATA.cols.opis = window.__OPIS_DATA__.opis;
         resolve(true);
       } else {
+        if (window.__OPIS_DATA__) {
+          console.warn('data_opis.js не соответствует текущему data.json (устарел или от другой выгрузки) — столбец «Описание» пропущен, чтобы не показать текст не той жалобы.');
+        }
         resolve(false);
       }
     };
