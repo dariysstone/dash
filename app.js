@@ -25,13 +25,12 @@ function fmtDateRu(iso) {
 function statusBlockHtml(idxArr) {
   const total = idxArr.length;
   if (!total) return `<div class="empty-note">Нет данных за выбранный период</div>`;
-  let resolved = 0, overdueInWork = 0, repeatsInWork = 0, delayInWork = 0;
+  let resolved = 0, overdueCount = 0, repeatsCount = 0, delayCount = 0;
   for (const i of idxArr) {
-    const isResolved = RESOLVED_STATUS_IDX.has(DATA.cols.status[i]);
-    if (isResolved) { resolved++; continue; }
-    if (DATA.cols.overdue[i] === 1) overdueInWork++;
-    if (DATA.cols.hasRepeats[i] === 1) repeatsInWork++;
-    if (DATA.cols.hasDelay[i] === 1) delayInWork++;
+    if (RESOLVED_STATUS_IDX.has(DATA.cols.status[i])) resolved++;
+    if (DATA.cols.overdue[i] === 1) overdueCount++;
+    if (DATA.cols.hasRepeats[i] === 1) repeatsCount++;
+    if (DATA.cols.hasDelay[i] === 1) delayCount++;
   }
   const inWork = total - resolved;
   const rows = [{ label: 'Решено', count: resolved }, { label: 'В работе', count: inWork }];
@@ -46,9 +45,9 @@ function statusBlockHtml(idxArr) {
       <span class="dyn" style="color:var(--text-soft);font-weight:600;font-family:var(--mono);">${pct}%</span>
     </div>`;
   }).join('') + `</div>`;
-  if (inWork > 0 && (overdueInWork || repeatsInWork || delayInWork)) {
-    const pctOf = n => inWork ? Math.round(n / inWork * 100) : 0;
-    html += `<div class="status-subnote">Из «В работе»: просрочено — <b>${overdueInWork}</b> (${pctOf(overdueInWork)}%) · с повторами — <b>${repeatsInWork}</b> (${pctOf(repeatsInWork)}%) · с отложенными решениями — <b>${delayInWork}</b> (${pctOf(delayInWork)}%)</div>`;
+  if (overdueCount || repeatsCount || delayCount) {
+    const pctOf = n => total ? Math.round(n / total * 100) : 0;
+    html += `<div class="status-subnote">По вспомогательным файлам за период: просрочено — <b>${overdueCount}</b> (${pctOf(overdueCount)}%) · с повторами — <b>${repeatsCount}</b> (${pctOf(repeatsCount)}%) · с отложенными решениями — <b>${delayCount}</b> (${pctOf(delayCount)}%)</div>`;
   }
   return html;
 }
@@ -1288,7 +1287,7 @@ function buildExportRows(idxArr) {
 // out of the box if data_opis.js sits next to index.html. If you instead host it elsewhere
 // (e.g. a GitHub Release asset, since GitHub caps browser-uploaded repo files at 25MB but
 // Release assets can be much bigger), just change this to the full URL.
-const OPIS_JS_URL = 'https://github.com/dariysstone/dash/releases/download/data/data_opis.js';
+const OPIS_JS_URL = 'data_opis.js';
 
 // Guards against data.json and data_opis.js being out of sync (e.g. one updated, the other
 // forgotten) — in that case row index i means a DIFFERENT обращение in each file, so blindly
@@ -1302,10 +1301,10 @@ function opisMatchesCurrentData(opisPayload) {
 }
 
 async function ensureOpisLoaded() {
-  if (Array.isArray(DATA.cols.opis)) return true;
+  if (Array.isArray(DATA.cols.opis)) return 'ok';
   if (opisMatchesCurrentData(window.__OPIS_DATA__)) {
     DATA.cols.opis = window.__OPIS_DATA__.opis;
-    return true;
+    return 'ok';
   }
   return new Promise(resolve => {
     const script = document.createElement('script');
@@ -1313,15 +1312,15 @@ async function ensureOpisLoaded() {
     script.onload = () => {
       if (opisMatchesCurrentData(window.__OPIS_DATA__)) {
         DATA.cols.opis = window.__OPIS_DATA__.opis;
-        resolve(true);
+        resolve('ok');
+      } else if (window.__OPIS_DATA__) {
+        console.warn('data_opis.js не соответствует текущему data.json (устарел или от другой выгрузки) — столбец «Описание» пропущен, чтобы не показать текст не той жалобы.');
+        resolve('mismatch');
       } else {
-        if (window.__OPIS_DATA__) {
-          console.warn('data_opis.js не соответствует текущему data.json (устарел или от другой выгрузки) — столбец «Описание» пропущен, чтобы не показать текст не той жалобы.');
-        }
-        resolve(false);
+        resolve('empty');
       }
     };
-    script.onerror = () => resolve(false);
+    script.onerror = () => resolve('not-found');
     document.head.appendChild(script);
   });
 }
@@ -1574,8 +1573,20 @@ async function exportXlsx() {
   const btn = document.getElementById('btnExport');
   const originalLabel = btn ? btn.textContent : null;
   if (btn) { btn.textContent = '⏳ Загрузка описаний...'; btn.disabled = true; }
-  await ensureOpisLoaded(); // ok if this fails — export still works, just without the "Описание" column
+  const opisStatus = await ensureOpisLoaded();
   if (btn) { btn.textContent = originalLabel; btn.disabled = false; }
+
+  if (opisStatus !== 'ok') {
+    const reasons = {
+      'not-found': `Файл «${OPIS_JS_URL}» не найден по этому адресу (проверьте, что он действительно загружен на сайт рядом с data.json — см. README, раздел про data_opis.js).`,
+      'empty': `Файл «${OPIS_JS_URL}» загрузился, но не содержит ожидаемых данных — возможно, он повреждён или это не тот файл.`,
+      'mismatch': `Файл «${OPIS_JS_URL}» не соответствует текущему data.json (обновили один файл, но не другой) — подробности в README.`,
+    };
+    console.warn('Столбец «Описание» не будет включён в выгрузку:', reasons[opisStatus] || opisStatus);
+    if (!confirm(`Не удалось подгрузить текст обращений («Описание»): ${reasons[opisStatus] || 'неизвестная причина'}\n\nПродолжить экспорт без этого столбца?`)) {
+      return;
+    }
+  }
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(buildExportRows(idxArr)), 'Детализация');
