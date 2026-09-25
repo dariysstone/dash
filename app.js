@@ -1281,49 +1281,11 @@ function buildExportRows(idxArr) {
   return rows;
 }
 
-// "Описание" is deliberately NOT part of the main data.json (it would balloon it ~5x and slow down
-// every page load) — it lives in a separate file, fetched only when the user actually exports.
-// Where to load the (large, ~40MB) description data from. Defaults to same-origin — works
-// out of the box if data_opis.js sits next to index.html. If you instead host it elsewhere
-// (e.g. a GitHub Release asset, since GitHub caps browser-uploaded repo files at 25MB but
-// Release assets can be much bigger), just change this to the full URL.
-const OPIS_JS_URL = 'data_opis.js';
-
-// Guards against data.json and data_opis.js being out of sync (e.g. one updated, the other
-// forgotten) — in that case row index i means a DIFFERENT обращение in each file, so blindly
-// using it would attach the wrong "Описание" to the wrong row. Safer to skip the column than
-// export wrong data silently.
-function opisMatchesCurrentData(opisPayload) {
-  if (!opisPayload || !Array.isArray(opisPayload.opis)) return false;
-  if (opisPayload.opis.length !== DATA.n) return false;
-  if (DATA.buildId && opisPayload.buildId && opisPayload.buildId !== DATA.buildId) return false;
-  return true;
-}
-
-async function ensureOpisLoaded() {
-  if (Array.isArray(DATA.cols.opis)) return 'ok';
-  if (opisMatchesCurrentData(window.__OPIS_DATA__)) {
-    DATA.cols.opis = window.__OPIS_DATA__.opis;
-    return 'ok';
-  }
-  return new Promise(resolve => {
-    const script = document.createElement('script');
-    script.src = OPIS_JS_URL + (OPIS_JS_URL.includes('?') ? '&' : '?') + 't=' + Date.now();
-    script.onload = () => {
-      if (opisMatchesCurrentData(window.__OPIS_DATA__)) {
-        DATA.cols.opis = window.__OPIS_DATA__.opis;
-        resolve('ok');
-      } else if (window.__OPIS_DATA__) {
-        console.warn('data_opis.js не соответствует текущему data.json (устарел или от другой выгрузки) — столбец «Описание» пропущен, чтобы не показать текст не той жалобы.');
-        resolve('mismatch');
-      } else {
-        resolve('empty');
-      }
-    };
-    script.onerror = () => resolve('not-found');
-    document.head.appendChild(script);
-  });
-}
+// "Описание" (complaint text) is baked directly into data.json as DATA.cols.opis — same file,
+// same fetch/load as everything else, so it can never drift out of sync and never needs a
+// separate network request at export time. (Earlier builds tried lazily loading it from a
+// second file to keep the main data.json small; that added a class of "file not found" /
+// "out of sync" failures in production, so it was dropped in favor of one unified file.)
 
 /* ================= Report -> PPTX export (hand-built minimal OOXML via JSZip) ================= */
 function pxmlEscape(s) {
@@ -1570,22 +1532,8 @@ async function exportXlsx() {
     return;
   }
 
-  const btn = document.getElementById('btnExport');
-  const originalLabel = btn ? btn.textContent : null;
-  if (btn) { btn.textContent = '⏳ Загрузка описаний...'; btn.disabled = true; }
-  const opisStatus = await ensureOpisLoaded();
-  if (btn) { btn.textContent = originalLabel; btn.disabled = false; }
-
-  if (opisStatus !== 'ok') {
-    const reasons = {
-      'not-found': `Файл «${OPIS_JS_URL}» не найден по этому адресу (проверьте, что он действительно загружен на сайт рядом с data.json — см. README, раздел про data_opis.js).`,
-      'empty': `Файл «${OPIS_JS_URL}» загрузился, но не содержит ожидаемых данных — возможно, он повреждён или это не тот файл.`,
-      'mismatch': `Файл «${OPIS_JS_URL}» не соответствует текущему data.json (обновили один файл, но не другой) — подробности в README.`,
-    };
-    console.warn('Столбец «Описание» не будет включён в выгрузку:', reasons[opisStatus] || opisStatus);
-    if (!confirm(`Не удалось подгрузить текст обращений («Описание»): ${reasons[opisStatus] || 'неизвестная причина'}\n\nПродолжить экспорт без этого столбца?`)) {
-      return;
-    }
+  if (!Array.isArray(DATA.cols.opis)) {
+    console.warn('Столбец «Описание» отсутствует в data.json — выгрузка пройдёт без него.');
   }
 
   const wb = XLSX.utils.book_new();
