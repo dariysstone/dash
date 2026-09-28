@@ -1281,11 +1281,58 @@ function buildExportRows(idxArr) {
   return rows;
 }
 
-// "Описание" (complaint text) is baked directly into data.json as DATA.cols.opis — same file,
-// same fetch/load as everything else, so it can never drift out of sync and never needs a
-// separate network request at export time. (Earlier builds tried lazily loading it from a
-// second file to keep the main data.json small; that added a class of "file not found" /
-// "out of sync" failures in production, so it was dropped in favor of one unified file.)
+// "Описание" (complaint text) is the single biggest chunk of the dataset, so it lives in a
+// second file, data_opis.json, fetched only when the user actually exports — not on every page
+// load. It is always written next to data.json by the same extraction run and deployed as part
+// of the same site/ folder, so the two never get uploaded or updated separately (that manual
+// split, plus loading it via GitHub Releases' no-CORS asset hosting, was the source of earlier
+// "file not found" / "wrong text" bugs — a same-origin fetch() of a file shipped in the same
+// deploy doesn't have either problem).
+const OPIS_JSON_URL = 'data_opis.json';
+
+function opisMatchesCurrentData(opisPayload) {
+  if (!opisPayload || !Array.isArray(opisPayload.opis)) return false;
+  if (opisPayload.opis.length !== DATA.n) return false;
+  if (DATA.buildId && opisPayload.buildId && opisPayload.buildId !== DATA.buildId) return false;
+  return true;
+}
+
+// Returns 'ok' | 'not-found' | 'empty' | 'mismatch'. On anything but 'ok', DATA.cols.opis is left
+// unset and the caller just exports without the column — no blocking dialog, this runs on every
+// export click and should stay unobtrusive.
+async function ensureOpisLoaded() {
+  if (Array.isArray(DATA.cols.opis)) return 'ok';
+  // Single-file build (dashboard.html) embeds it as a raw JSON string, parsed lazily here so the
+  // page itself doesn't pay JSON.parse cost for it on load.
+  if (typeof window.__EMBEDDED_OPIS_RAW__ === 'string') {
+    try {
+      const payload = JSON.parse(window.__EMBEDDED_OPIS_RAW__);
+      if (opisMatchesCurrentData(payload)) {
+        DATA.cols.opis = payload.opis;
+        return 'ok';
+      }
+      return payload ? 'mismatch' : 'empty';
+    } catch (e) {
+      console.warn('Не удалось разобрать встроенные данные «Описание»:', e);
+      return 'empty';
+    }
+  }
+  // Multi-file build (site/) — same-origin fetch, no CORS issue since it ships next to data.json.
+  try {
+    const r = await fetch(OPIS_JSON_URL + '?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) return 'not-found';
+    const payload = await r.json();
+    if (opisMatchesCurrentData(payload)) {
+      DATA.cols.opis = payload.opis;
+      return 'ok';
+    }
+    console.warn('data_opis.json не соответствует текущему data.json (устарел или от другой выгрузки) — столбец «Описание» пропущен, чтобы не показать текст не той жалобы.');
+    return 'mismatch';
+  } catch (e) {
+    console.warn('Не удалось загрузить data_opis.json:', e);
+    return 'not-found';
+  }
+}
 
 /* ================= Report -> PPTX export (hand-built minimal OOXML via JSZip) ================= */
 function pxmlEscape(s) {
@@ -1532,8 +1579,17 @@ async function exportXlsx() {
     return;
   }
 
-  if (!Array.isArray(DATA.cols.opis)) {
-    console.warn('Столбец «Описание» отсутствует в data.json — выгрузка пройдёт без него.');
+  const btn = document.getElementById('btnExport');
+  const originalLabel = btn ? btn.textContent : null;
+  if (btn) { btn.textContent = '⏳ Загрузка описаний...'; btn.disabled = true; }
+  const opisStatus = await ensureOpisLoaded();
+  if (btn) { btn.textContent = originalLabel; btn.disabled = false; }
+
+  if (opisStatus !== 'ok') {
+    // Quiet fallback, not a blocking dialog: data_opis.json ships in the same deploy as data.json,
+    // so this should be rare — if it does happen, exporting without the column beats interrupting
+    // the user, and the reason is still visible in the console for troubleshooting.
+    console.warn(`Столбец «Описание» не включён в выгрузку (${opisStatus}: data_opis.json не найден рядом с data.json, пуст, или не соответствует текущим данным).`);
   }
 
   const wb = XLSX.utils.book_new();
